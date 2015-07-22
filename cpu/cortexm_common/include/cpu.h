@@ -88,6 +88,11 @@ static inline void cpu_sleep_until_event(void)
     __WFE();
 }
 
+/**
+ * @brief   Print CPU information to stdout
+ */
+void print_cpu_info(void);
+
 #ifdef __cplusplus
 }
 #endif
