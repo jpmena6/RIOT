@@ -97,6 +97,11 @@ extern "C" {
  */
 void board_init(void);
 
+/**
+ * @brief Print board information to stdout
+ */
+void print_board_info(void);
+
 #ifdef __cplusplus
 }
 #endif

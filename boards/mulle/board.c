@@ -20,6 +20,8 @@
 
 #include <stddef.h> /* for NULL */
 #include <stdio.h>
+#include <stdint.h>
+#include <inttypes.h>
 #include "board.h"
 #include "cpu.h"
 #include "mcg.h"
@@ -120,6 +122,25 @@ void board_init(void)
         /* Increment boot counter */
         increase_boot_count();
     }
+}
+
+void print_board_info(void)
+{
+    union {
+        uint32_t u32;
+        uint8_t  u8[sizeof(uint32_t)];
+    } rec;
+    rec.u32 = 0;
+
+    puts("Board info:");
+    puts("===========");
+    puts("");
+    puts("board: Eistec Mulle");
+
+    if (mulle_nvram->read(mulle_nvram, &rec.u8[0], MULLE_NVRAM_BOOT_COUNT, sizeof(rec.u32)) == sizeof(rec.u32)) {
+        printf("boot count: %"PRId32"\n", rec.u32);
+    }
+    puts("");
 }
 
 static inline void power_pins_init(void)
