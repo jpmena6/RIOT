@@ -36,6 +36,12 @@
  */
 
 /**
+ * @defgroup    cpu_kinetis_common_cpuinfo Kinetis CPU information
+ * @ingroup     cpu_kinetis_common
+ * @brief       CPU information module.
+ */
+
+/**
  * @defgroup    cpu_kinetis_common_gpio Kinetis GPIO
  * @ingroup     cpu_kinetis_common
  * @brief       GPIO driver.
