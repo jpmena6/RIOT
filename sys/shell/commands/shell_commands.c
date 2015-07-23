@@ -133,6 +133,9 @@ extern int _ccnl_fib(int argc, char **argv);
 extern int _ntpdate(int argc, char **argv);
 #endif
 
+extern int _boardinfo_handler(int argc, char **argv);
+extern int _cpuinfo_handler(int argc, char **argv);
+
 const shell_command_t _shell_command_list[] = {
     {"reboot", "Reboot the node", _reboot_handler},
 #ifdef MODULE_CONFIG
