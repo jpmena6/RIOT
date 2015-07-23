@@ -221,5 +221,7 @@ const shell_command_t _shell_command_list[] = {
 #ifdef MODULE_SNTP
     { "ntpdate", "synchronizes with a remote time server", _ntpdate },
 #endif
+    {"cpuinfo", "show CPU information", _cpuinfo_handler },
+    {"boardinfo", "show board information", _boardinfo_handler },
     {NULL, NULL, NULL}
 };

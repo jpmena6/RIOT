@@ -70,6 +70,11 @@ ifneq (,$(filter sntp,$(USEMODULE)))
   SRC += sc_sntp.c
 endif
 
+# So far only supported on one board
+ifneq (,$(filter mulle,$(BOARD)))
+  SRC += sc_hwinfo.c
+endif
+
 # TODO
 # Conditional building not possible at the moment due to
 # https://github.com/RIOT-OS/RIOT/issues/2058
