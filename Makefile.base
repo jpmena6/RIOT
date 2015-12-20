@@ -83,8 +83,8 @@ ifeq ($(GEN_CLANG_COMPLETE),1)
   ifneq ($(SRCXX),)
     # use CXXFLAGS for this directory if any C++ source files were specified
     # Clunky workaround for mixing C and C++ files in the same tree.
-    $(shell printf '%s' "$(CXXFLAGS) $(INCLUDES)"  | sed -e 's/ -/\n-/g' > .clang_complete)
+    $(shell printf '%s' "$(CXXFLAGS) $(INCLUDES)"  | sed -e 's/ -/\n-/g' -e "s/[ \t]*$$//" -e 's/-target /-target\n/' > .clang_complete)
   else
-    $(shell printf '%s' "$(CFLAGS) $(INCLUDES)"  | sed -e 's/ -/\n-/g' > .clang_complete)
+    $(shell printf '%s' "$(CFLAGS) $(INCLUDES)"  | sed -e 's/ -/\n-/g' -e 's/[ \t]*$$//' -e 's/-target /-target\n/' > .clang_complete)
   endif
 endif
