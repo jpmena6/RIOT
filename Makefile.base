@@ -77,3 +77,14 @@ $(ASSMOBJ): $(BINDIR)$(MODULE)/%.o: %.S
 # pull in dependency info for *existing* .o files
 # deleted header files will be silently ignored
 -include $(DEP)
+
+# Generate a .clang_complete file for symbol completion in vim and Atom editors.
+ifeq ($(GEN_CLANG_COMPLETE),1)
+  ifneq ($(SRCXX),)
+    # use CXXFLAGS for this directory if any C++ source files were specified
+    # Clunky workaround for mixing C and C++ files in the same tree.
+    $(shell printf '%s' "$(CXXFLAGS) $(INCLUDES)"  | sed -e 's/ -/\n-/g' > .clang_complete)
+  else
+    $(shell printf '%s' "$(CFLAGS) $(INCLUDES)"  | sed -e 's/ -/\n-/g' > .clang_complete)
+  endif
+endif

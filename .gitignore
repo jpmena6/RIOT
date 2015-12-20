@@ -52,3 +52,6 @@ pkg/wakaama/wakaama
 
 # Vagrant
 .vagrant
+
+# Clang complete
+.clang_complete
