@@ -3,7 +3,7 @@ export PREFIX ?= msp430-
 
 # define build specific options
 CFLAGS_CPU   = -mmcu=$(CPU_MODEL)
-CFLAGS_STYLE = -std=gnu99 -Wall -Wstrict-prototypes
+CFLAGS_STYLE =
 CFLAGS_LINK  =
 CFLAGS_DBG   = -gdwarf-2
 CFLAGS_OPT  ?= -Os
