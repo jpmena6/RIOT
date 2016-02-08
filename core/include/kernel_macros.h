@@ -38,7 +38,8 @@ extern "C" {
  * @param[in]   MEMBER   name of the member of TYPE which PTR points to
  * @return      Pointer to the container of PTR.
  */
-#if __STDC_VERSION__ >= 201112L
+/* GCC 4.8 advertise C11 support, but does not have _Generic */
+#if (__STDC_VERSION__ >= 201112L) && (!((__GNUC__ == 4) && (__GNUC_MINOR__ < 9)))
 #   define container_of(PTR, TYPE, MEMBER) \
         (_Generic((PTR), \
             const __typeof__ (((TYPE *) 0)->MEMBER) *: \
