@@ -10,9 +10,9 @@ CFLAGS_OPT  ?= -Os
 # export compiler flags
 export CFLAGS += $(CFLAGS_CPU) $(CFLAGS_STYLE) $(CFLAGS_LINK) $(CFLAGS_DBG) $(CFLAGS_OPT)
 # export assmebly flags
-export ASFLAGS += $(CFLAGS_CPU) --defsym $(CPU_MODEL)=1 $(CFLAGS_DBG)
+export ASFLAGS += $(CFLAGS_CPU) --defsym $(CPU_MODEL)=1 $(CFLAGS_DBG) $(CFLAGS_OPT)
 # export linker flags
-export LINKFLAGS += $(CFLAGS_CPU) -lgcc
+export LINKFLAGS += $(CFLAGS_CPU) $(CFLAGS_STYLE) $(CFLAGS_DBG) $(CFLAGS_OPT) -static -lgcc
 
 # Import all toolchain settings
 include $(RIOTBOARD)/Makefile.include.gnu
