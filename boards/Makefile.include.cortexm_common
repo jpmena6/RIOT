@@ -31,7 +31,7 @@ ifneq (llvm,$(TOOLCHAIN))
 # not building with LLVM
 export CFLAGS_CPU  += -mno-thumb-interwork
 endif
-export CFLAGS_STYLE = -std=gnu99 -Wall -Wstrict-prototypes -Werror=implicit-function-declaration
+export CFLAGS_STYLE =
 export CFLAGS_LINK  = -ffunction-sections -fdata-sections -fno-builtin -fshort-enums
 export CFLAGS_DBG   = -ggdb -g3
 export CFLAGS_OPT  ?= -Os
