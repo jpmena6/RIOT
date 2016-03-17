@@ -563,7 +563,7 @@ inline static size_t iphc_nhc_udp_encode(gnrc_pktsnip_t *udp, ipv6_hdr_t *ipv6_h
     /* Set UDP header ID (rfc6282#section-5). */
     ipv6_hdr->nh |= NHC_UDP_ID;
 
-    if (udp->type == GNRC_NETTYPE_IPV6) {
+    if (udp->type != GNRC_NETTYPE_UDP) {
         /* forwarded ipv6 packet */
         size_t diff = sizeof(udp_hdr_t) - nhc_len;
         for (int i = nhc_len; i < (udp->size - diff); i++) {
