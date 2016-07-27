@@ -41,18 +41,18 @@
 #define TRACE(...)
 #endif
 
-static mtd_sta_t mtd_spi_nor_init(mtd_dev_t *mtd);
+static int mtd_spi_nor_init(mtd_dev_t *mtd);
 static int mtd_spi_nor_read(mtd_dev_t *mtd, void *dest, uint32_t addr, uint32_t size);
 static int mtd_spi_nor_write(mtd_dev_t *mtd, const void *src, uint32_t addr, uint32_t size);
 static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size);
-static int mtd_spi_nor_ioctl(mtd_dev_t *mtd, unsigned char ctrl, void *buff);
+static int mtd_spi_nor_power(mtd_dev_t *mtd, enum mtd_power_state power);
 
 const mtd_desc_t mtd_spi_nor_driver = {
     .init = mtd_spi_nor_init,
     .read = mtd_spi_nor_read,
     .write = mtd_spi_nor_write,
     .erase = mtd_spi_nor_erase,
-    .ioctl = mtd_spi_nor_ioctl,
+    .power = mtd_spi_nor_power,
 };
 
 /**
@@ -364,16 +364,16 @@ static inline int wait_for_write_complete(mtd_spi_nor_t *dev)
         if ((status & 1) == 0) { /* TODO magic number */
             break;
         }
-        #if MODULE_XTIMER
+#if MODULE_XTIMER
         xtimer_usleep(50 * MS_IN_USEC); /* TODO magic number */
-        #else
+#else
         thread_yield();
-        #endif
+#endif
     } while (1);
     return 0;
 }
 
-static mtd_sta_t mtd_spi_nor_init(mtd_dev_t *mtd)
+static int mtd_spi_nor_init(mtd_dev_t *mtd)
 {
     DEBUG("mtd_spi_nor_init: %p\n", (void *)mtd);
     mtd_spi_nor_t *dev = (mtd_spi_nor_t *)mtd;
@@ -392,7 +392,7 @@ static mtd_sta_t mtd_spi_nor_init(mtd_dev_t *mtd)
     DEBUG("mtd_spi_nor_init: Using %u byte addresses\n", dev->addr_width);
 
     if (dev->addr_width == 0) {
-        return MTD_STA_NOINIT;
+        return -EINVAL;
     }
 
     /* CS */
@@ -402,7 +402,7 @@ static mtd_sta_t mtd_spi_nor_init(mtd_dev_t *mtd)
 
     int res = mtd_spi_read_jedec_id(dev, &dev->jedec_id);
     if (res < 0) {
-        return MTD_STA_NOINIT;
+        return -EIO;
     }
     DEBUG("mtd_spi_nor_init: Found chip with ID: (%d, 0x%02x, 0x%02x, 0x%02x)\n",
         dev->jedec_id.bank, dev->jedec_id.manuf, dev->jedec_id.device[0], dev->jedec_id.device[1]);
@@ -443,7 +443,7 @@ static mtd_sta_t mtd_spi_nor_init(mtd_dev_t *mtd)
     DEBUG("mtd_spi_nor_init: sec_addr_mask = 0x%08" PRIx32 ", sec_addr_shift = %u\n",
         mask, (unsigned int)shift);
 
-    return MTD_STA_INIT;
+    return 0;
 }
 
 static int mtd_spi_nor_read(mtd_dev_t *mtd, void *dest, uint32_t addr, uint32_t size)
@@ -522,16 +522,18 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
         (void *)mtd, addr, size);
     mtd_spi_nor_t *dev = (mtd_spi_nor_t *)mtd;
     uint32_t sector_size = mtd->page_size * mtd->pages_per_sector;
+    uint32_t total_size = mtd->page_size * mtd->pages_per_sector * mtd->sector_count;
     if (size != sector_size) {
         DEBUG("mtd_spi_nor_erase: ERR: erase size != sector size (%" PRIu32 " != %" PRIu32 ")!\n",
             size, sector_size);
         return -EINVAL;
     }
+
     if (dev->sec_addr_mask &&
         ((addr & ~dev->sec_addr_mask) != 0)) {
         /* This is not a requirement in hardware, but it helps in catching
          * software bugs (the erase-all-your-files kind) */
-        DEBUG("addr = %" PRIx32 " ~dev->sec_addr_mask = %" PRIx32 "", addr, ~dev->sec_addr_mask);
+        DEBUG("addr = %" PRIx32 " ~dev->erase_addr_mask = %" PRIx32 "", addr, ~dev->sec_addr_mask);
         DEBUG("mtd_spi_nor_erase: ERR: erase addr not aligned on %" PRIu32 " byte boundary.\n",
             sector_size);
         return -EINVAL;
@@ -545,10 +547,28 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
         DEBUG("mtd_spi_nor_erase: wren SPI error %d\n", res);
         return -EIO;
     }
-    res = mtd_spi_cmd_addr_write(dev, dev->opcode->sector_erase, addr_be, NULL, 0);
-    if (res < 0) {
-        DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
-        return -EIO;
+
+    if (size == total_size) {
+        res = mtd_spi_cmd_addr_write(dev, dev->opcode->chip_erase, addr_be, NULL, 0);
+        if (res < 0) {
+            DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
+            return -EIO;
+        }
+    }
+    else if (sector_size == 4096) {
+        /* 4 KiO sectors can be erased with sector erase command */
+        res = mtd_spi_cmd_addr_write(dev, dev->opcode->sector_erase, addr_be, NULL, 0);
+        if (res < 0) {
+            DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
+            return -EIO;
+        }
+    }
+    else {
+        res = mtd_spi_cmd_addr_write(dev, dev->opcode->block_erase, addr_be, NULL, 0);
+        if (res < 0) {
+            DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
+            return -EIO;
+        }
     }
 
     /* waiting for the command to complete before returning */
@@ -556,15 +576,23 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
     return 0;
 }
 
-static int mtd_spi_nor_ioctl(mtd_dev_t *mtd, unsigned char ctrl, void *buf)
+static int mtd_spi_nor_power(mtd_dev_t *mtd, enum mtd_power_state power)
 {
-    int ret = -EINVAL;
-    switch (ctrl) {
-        case MTD_CTRL_POWER:
-            /* TODO: Do something */
+    int res = 0;
+    mtd_spi_nor_t *dev = (mtd_spi_nor_t *)mtd;
+
+    switch (power) {
+        case MTD_POWER_UP:
+            res = mtd_spi_cmd(dev, dev->opcode->wake);
             break;
-        default:
+        case MTD_POWER_DOWN:
+            res = mtd_spi_cmd(dev, dev->opcode->sleep);
             break;
     }
-    return ret;
+
+    if (res < 0) {
+        return -EIO;
+    }
+
+    return 0;
 }

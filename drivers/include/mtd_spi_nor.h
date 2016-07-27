@@ -46,6 +46,7 @@ typedef struct {
     uint8_t read_fast;    /**< Read data bytes, 3 byte address, at higher speed */
     uint8_t page_program; /**< Page program */
     uint8_t sector_erase; /**< Block erase 4 KiB */
+    uint8_t block_erase;  /**< Block erase (usually 64 KiB) */
     uint8_t chip_erase;   /**< Chip erase */
     uint8_t sleep;        /**< Deep power down */
     uint8_t wake;         /**< Release from deep power down */
@@ -69,6 +70,10 @@ typedef struct __attribute__((packed)) {
  * @see http://www.jedec.org/standards-documents/results/jep106
  */
 #define JEDEC_NEXT_BANK (0x7f)
+
+enum {
+    SPI_NOR_F_SECT_4K      = 1,
+};
 
 /**
  * @brief Device descriptor for serial flash memory devices
@@ -123,6 +128,22 @@ extern const mtd_desc_t mtd_spi_nor_driver;
  * different devices, as well as in the Linux kernel, so they seem quite
  * sensible for default values. */
 extern const mtd_spi_nor_opcode_t mtd_spi_nor_opcode_default;
+
+#define MTD_SPI_NOR_DESC(_dev, _sect_size, _flash_size, _addr_width, _spi, _cs) \
+    static mtd_spi_nor_t _dev = { \
+        .base = { \
+            .driver = &mtd_spi_nor_driver, \
+            .page_size = 256, \
+            .pages_per_sector = _sect_size / 256, \
+            .sector_count = _flash_size / _sect_size, \
+        }, \
+        .opcode = &mtd_spi_nor_opcode_default, \
+        .spi = _spi, \
+        .cs = _cs, \
+        .addr_width = _addr_width, \
+    }
+
+#define MTD_SPI_NOR_MX25_8M_DESC(_dev, _spi, _cs) MTD_SPI_NOR_DESC(_dev, 4096, 0x800000, 3, _spi, _cs)
 
 #ifdef __cplusplus
 }
