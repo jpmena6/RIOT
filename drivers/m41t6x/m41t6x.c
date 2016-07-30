@@ -175,7 +175,11 @@ int m41t6x_set_time(const m41t6x_t *rtc, const struct tm *time)
         (unsigned int)buf[4], (unsigned int)buf[5],
         (unsigned int)buf[6], (unsigned int)buf[7]);
 
-    return _m41t6x_write(rtc, M41T6X_REG_SUBSECOND, &buf[0], M41T6X_CLOCK_SIZE);
+    res = _m41t6x_write(rtc, M41T6X_REG_SUBSECOND, &buf[0], M41T6X_CLOCK_SIZE);
+    if (res < 0) {
+        return res;
+    }
+    return 0;
 }
 
 int m41t6x_get_time(const m41t6x_t *rtc, struct tm *time)
