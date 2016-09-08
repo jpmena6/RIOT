@@ -38,18 +38,19 @@ extern "C"
  * @brief SPI NOR flash opcode table
  */
 typedef struct {
-    uint8_t rdid;         /**< Read identification (JEDEC ID) */
-    uint8_t wren;         /**< Write enable */
-    uint8_t rdsr;         /**< Read status register */
-    uint8_t wrsr;         /**< Write status register */
-    uint8_t read;         /**< Read data bytes, 3 byte address */
-    uint8_t read_fast;    /**< Read data bytes, 3 byte address, at higher speed */
-    uint8_t page_program; /**< Page program */
-    uint8_t sector_erase; /**< Block erase 4 KiB */
-    uint8_t block_erase;  /**< Block erase (usually 64 KiB) */
-    uint8_t chip_erase;   /**< Chip erase */
-    uint8_t sleep;        /**< Deep power down */
-    uint8_t wake;         /**< Release from deep power down */
+    uint8_t rdid;            /**< Read identification (JEDEC ID) */
+    uint8_t wren;            /**< Write enable */
+    uint8_t rdsr;            /**< Read status register */
+    uint8_t wrsr;            /**< Write status register */
+    uint8_t read;            /**< Read data bytes, 3 byte address */
+    uint8_t read_fast;       /**< Read data bytes, 3 byte address, at higher speed */
+    uint8_t page_program;    /**< Page program */
+    uint8_t sector_erase;    /**< Block erase 4 KiB */
+    uint8_t block_erase_32k; /**< 32KiB block erase */
+    uint8_t block_erase;     /**< Block erase (usually 64 KiB) */
+    uint8_t chip_erase;      /**< Chip erase */
+    uint8_t sleep;           /**< Deep power down */
+    uint8_t wake;            /**< Release from deep power down */
     /* TODO: enter 4 byte address mode for large memories */
 } mtd_spi_nor_opcode_t;
 
@@ -71,9 +72,14 @@ typedef struct __attribute__((packed)) {
  */
 #define JEDEC_NEXT_BANK (0x7f)
 
-enum {
-    SPI_NOR_F_SECT_4K      = 1,
-};
+/**
+ * @brief Flag to set when the device support 4KiB sector erase (sector_erase opcode)
+ */
+#define SPI_NOR_F_SECT_4K   1
+/**
+ * @brief Flag to set when the device support 32KiB block erase (block_erase_32k opcode)
+ */
+#define SPI_NOR_F_SECT_32K  2
 
 /**
  * @brief Device descriptor for serial flash memory devices
@@ -85,6 +91,7 @@ typedef struct {
     const mtd_spi_nor_opcode_t *opcode; /**< Opcode table for the device */
     spi_t spi;               /**< SPI bus the device is connected to */
     gpio_t cs;               /**< CS pin GPIO handle */
+    uint16_t flag;           /**< Config flags */
     mtd_jedec_id_t jedec_id; /**< JEDEC ID of the chip */
     /**
      * @brief bitmask to corresponding to the page address
@@ -129,7 +136,7 @@ extern const mtd_desc_t mtd_spi_nor_driver;
  * sensible for default values. */
 extern const mtd_spi_nor_opcode_t mtd_spi_nor_opcode_default;
 
-#define MTD_SPI_NOR_DESC(_dev, _sect_size, _flash_size, _addr_width, _spi, _cs) \
+#define MTD_SPI_NOR_DESC(_dev, _sect_size, _flash_size, _addr_width, _flag, _spi, _cs) \
     static mtd_spi_nor_t _dev = { \
         .base = { \
             .driver = &mtd_spi_nor_driver, \
@@ -137,13 +144,14 @@ extern const mtd_spi_nor_opcode_t mtd_spi_nor_opcode_default;
             .pages_per_sector = _sect_size / 256, \
             .sector_count = _flash_size / _sect_size, \
         }, \
+        .flag = _flag, \
         .opcode = &mtd_spi_nor_opcode_default, \
         .spi = _spi, \
         .cs = _cs, \
         .addr_width = _addr_width, \
     }
 
-#define MTD_SPI_NOR_MX25_8M_DESC(_dev, _spi, _cs) MTD_SPI_NOR_DESC(_dev, 4096, 0x800000, 3, _spi, _cs)
+#define MTD_SPI_NOR_MX25_8M_DESC(_dev, _spi, _cs) MTD_SPI_NOR_DESC(_dev, 4096, 0x800000, 3, SPI_NOR_F_SECT_4K | SPI_NOR_F_SECT_32K, _spi, _cs)
 
 #ifdef __cplusplus
 }

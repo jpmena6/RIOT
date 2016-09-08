@@ -27,18 +27,19 @@
  * space in the .rodata section in program ROM. */
 
 const mtd_spi_nor_opcode_t mtd_spi_nor_opcode_default = {
-    .rdid         = 0x9f,
-    .wren         = 0x06,
-    .rdsr         = 0x05,
-    .wrsr         = 0x01,
-    .read         = 0x03,
-    .read_fast    = 0x0b,
-    .page_program = 0x02,
-    .sector_erase = 0x20,
-    .block_erase  = 0xd8,
-    .chip_erase   = 0xc7,
-    .sleep        = 0xb9,
-    .wake         = 0xab,
+    .rdid            = 0x9f,
+    .wren            = 0x06,
+    .rdsr            = 0x05,
+    .wrsr            = 0x01,
+    .read            = 0x03,
+    .read_fast       = 0x0b,
+    .page_program    = 0x02,
+    .sector_erase    = 0x20,
+    .block_erase_32k = 0x52,
+    .block_erase     = 0xd8,
+    .chip_erase      = 0xc7,
+    .sleep           = 0xb9,
+    .wake            = 0xab,
 };
 
 /** @} */
