@@ -521,7 +521,6 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
     DEBUG("mtd_spi_nor_erase: %p, 0x%" PRIx32 ", 0x%" PRIx32 "\n",
         (void *)mtd, addr, size);
     mtd_spi_nor_t *dev = (mtd_spi_nor_t *)mtd;
-    uint32_t sector_size = mtd->page_size * mtd->pages_per_sector;
     uint32_t total_size = mtd->page_size * mtd->pages_per_sector * mtd->sector_count;
 
     if (dev->sec_addr_mask &&
