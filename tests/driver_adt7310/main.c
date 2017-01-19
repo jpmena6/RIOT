@@ -36,7 +36,7 @@
 #endif
 
 #define SPI_CONF    (SPI_CONF_SECOND_FALLING)
-#define SPI_SPEED   (SPI_SPEED_10MHZ)
+#define SPI_SPEED   (SPI_SPEED_5MHZ)
 
 #define SLEEP_CONT  (100 * 1000U)
 #define SLEEP_1SPS  (1000 * 1000U)
