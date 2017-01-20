@@ -25,6 +25,7 @@
 #include "mtd.h"
 #if MODULE_XTIMER
 #include "xtimer.h"
+#include "timex.h"
 #else
 #include "thread.h"
 #endif
@@ -365,7 +366,7 @@ static inline int wait_for_write_complete(mtd_spi_nor_t *dev)
             break;
         }
 #if MODULE_XTIMER
-        xtimer_usleep(50 * MS_IN_USEC); /* TODO magic number */
+        xtimer_usleep(50 * US_PER_MS); /* TODO magic number */
 #else
         thread_yield();
 #endif
