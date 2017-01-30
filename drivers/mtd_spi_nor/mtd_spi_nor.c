@@ -84,29 +84,17 @@ static int mtd_spi_cmd_addr_read(mtd_spi_nor_t *dev, uint8_t opcode,
         TRACE("\n");
     }
     /* Acquire exclusive access to the bus. */
-    spi_acquire(dev->spi);
-    /* Perform the transaction */
-    gpio_clear(dev->cs);
+    spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
+
     do {
-        int res;
         /* Send opcode followed by address */
-        res = spi_transfer_regs(dev->spi, opcode, (char *)addr_buf, NULL, dev->addr_width);
-        if (res < dev->addr_width) {
-            DEBUG("mtd_spi_cmd_addr_read: SPI error %d\n", res);
-            status = -1;
-            break;
-        }
+        spi_transfer_byte(dev->spi, dev->cs, true, opcode);
+        spi_transfer_bytes(dev->spi, dev->cs, true, (char *)addr_buf, NULL, dev->addr_width);
 
         /* Read data */
-        res = spi_transfer_bytes(dev->spi, NULL, dest, count);
-        if (res != count) {
-            DEBUG("mtd_spi_cmd_addr_read: SPI error %d\n", res);
-            status = -2;
-            break;
-        }
+        spi_transfer_bytes(dev->spi, dev->cs, false, NULL, dest, count);
     } while(0);
 
-    gpio_set(dev->cs);
     /* Release the bus for other threads. */
     spi_release(dev->spi);
 
@@ -141,32 +129,18 @@ static int mtd_spi_cmd_addr_write(mtd_spi_nor_t *dev, uint8_t opcode,
         TRACE("\n");
     }
     /* Acquire exclusive access to the bus. */
-    spi_acquire(dev->spi);
-    /* Perform the transaction */
-    gpio_clear(dev->cs);
+    spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
     do {
-        int res;
         /* Send opcode followed by address */
-        res = spi_transfer_regs(dev->spi, opcode, (char *)addr_buf, NULL, dev->addr_width);
-        if (res < dev->addr_width) {
-            DEBUG("mtd_spi_cmd_addr_write: SPI error %d\n", res);
-            status = -1;
-            break;
-        }
-
+        spi_transfer_byte(dev->spi, dev->cs, true, opcode);
+        spi_transfer_bytes(dev->spi, dev->cs, true, (char *)addr_buf, NULL, dev->addr_width);
         /* Write data */
         if (count > 0) {
-            res = spi_transfer_bytes(dev->spi, (void *)src, NULL, count);
-            if (res != count) {
-                DEBUG("mtd_spi_cmd_addr_write: SPI error %d\n", res);
-                status = -2;
-                break;
-            }
+            spi_transfer_bytes(dev->spi, dev->cs, false, (void *)src, NULL, count);
         }
     } while(0);
 
-    gpio_set(dev->cs);
     /* Release the bus for other threads. */
     spi_release(dev->spi);
 
@@ -188,17 +162,10 @@ static int mtd_spi_cmd_read(mtd_spi_nor_t *dev, uint8_t opcode, void* dest, uint
         (void *)dev, (unsigned int)opcode, dest, count);
     int status = 0;
     /* Acquire exclusive access to the bus. */
-    spi_acquire(dev->spi);
-    /* Perform the transaction */
-    gpio_clear(dev->cs);
+    spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
-    int res = spi_transfer_regs(dev->spi, opcode, NULL, dest, count);
-    if (res < count) {
-        DEBUG("mtd_spi_cmd_read: SPI error %d\n", res);
-        status = -1;
-    }
+    spi_transfer_regs(dev->spi, dev->cs, opcode, NULL, dest, count);
 
-    gpio_set(dev->cs);
     /* Release the bus for other threads. */
     spi_release(dev->spi);
     return status;
@@ -219,17 +186,10 @@ static int __attribute__((unused)) mtd_spi_cmd_write(mtd_spi_nor_t *dev, uint8_t
         (void *)dev, (unsigned int)opcode, src, count);
     int status = 0;
     /* Acquire exclusive access to the bus. */
-    spi_acquire(dev->spi);
-    /* Perform the transaction */
-    gpio_clear(dev->cs);
+    spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
-    int res = spi_transfer_regs(dev->spi, opcode, (void *)src, NULL, count);
-    if (res < count) {
-        DEBUG("mtd_spi_cmd_write: SPI error %d\n", res);
-        status = -1;
-    }
+    spi_transfer_regs(dev->spi, dev->cs, opcode, (void *)src, NULL, count);
 
-    gpio_set(dev->cs);
     /* Release the bus for other threads. */
     spi_release(dev->spi);
     return status;
@@ -248,17 +208,10 @@ static int mtd_spi_cmd(mtd_spi_nor_t *dev, uint8_t opcode)
         (void *)dev, (unsigned int)opcode);
     int status = 0;
     /* Acquire exclusive access to the bus. */
-    spi_acquire(dev->spi);
-    /* Perform the transaction */
-    gpio_clear(dev->cs);
+    spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
-    int res = spi_transfer_byte(dev->spi, opcode, NULL);
-    if (res < 1) {
-        DEBUG("mtd_spi_cmd_write: SPI error %d\n", res);
-        status = -1;
-    }
+    spi_transfer_byte(dev->spi, dev->cs, false, opcode);
 
-    gpio_set(dev->cs);
     /* Release the bus for other threads. */
     spi_release(dev->spi);
     return status;
@@ -285,32 +238,20 @@ static int mtd_spi_read_jedec_id(mtd_spi_nor_t *dev, mtd_jedec_id_t *out)
 {
     /* not using above read functions because of variable length rdid response */
     int status = 0;
-    int res;
     mtd_jedec_id_t jedec;
 
     DEBUG("mtd_spi_read_jedec_id: rdid=0x%02x\n", (unsigned int)dev->opcode->rdid);
 
     /* Acquire exclusive access to the bus. */
-    spi_acquire(dev->spi);
-    /* Perform the transaction */
-    gpio_clear(dev->cs);
+    spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
     /* Send opcode */
-    res = spi_transfer_byte(dev->spi, dev->opcode->rdid, NULL);
-    if (res < 1) {
-            DEBUG("mtd_spi_read_jedec_id: SPI error %d\n", res);
-        status = -1;
-    }
+    spi_transfer_byte(dev->spi, dev->cs, true, dev->opcode->rdid);
 
     /* Read manufacturer ID */
     jedec.bank = 1;
     while (status == 0) {
-        res = spi_transfer_byte(dev->spi, 0, (char *)&jedec.manuf);
-        if (res < 1) {
-            DEBUG("mtd_spi_read_jedec_id: SPI error %d\n", res);
-            status = -1;
-            break;
-        }
+        jedec.manuf = spi_transfer_byte(dev->spi, dev->cs, true, 0);
         if (jedec.manuf == JEDEC_NEXT_BANK) {
             /* next bank, see JEP106 */
             DEBUG("mtd_spi_read_jedec_id: manuf bank incr\n");
@@ -333,11 +274,7 @@ static int mtd_spi_read_jedec_id(mtd_spi_nor_t *dev, mtd_jedec_id_t *out)
 
     /* Read device ID */
     if (status == 0) {
-        res = spi_transfer_bytes(dev->spi, NULL, (char *)&jedec.device[0], sizeof(jedec.device));
-        if (res < 1) {
-            DEBUG("mtd_spi_read_jedec_id: SPI error %d\n", res);
-            status = -1;
-        }
+        spi_transfer_bytes(dev->spi, dev->cs, false, NULL, (char *)&jedec.device[0], sizeof(jedec.device));
     }
     DEBUG("mtd_spi_read_jedec_id: device=0x%02x, 0x%02x\n",
         (unsigned int)jedec.device[0], (unsigned int)jedec.device[1]);
@@ -346,7 +283,6 @@ static int mtd_spi_read_jedec_id(mtd_spi_nor_t *dev, mtd_jedec_id_t *out)
         *out = jedec;
     }
 
-    gpio_set(dev->cs);
     /* Release the bus for other threads. */
     spi_release(dev->spi);
     return status;
@@ -398,8 +334,7 @@ static int mtd_spi_nor_init(mtd_dev_t *mtd)
 
     /* CS */
     DEBUG("mtd_spi_nor_init: CS init\n");
-    gpio_init(dev->cs, GPIO_OUT);
-    gpio_set(dev->cs);
+    spi_init_cs(dev->spi, dev->cs);
 
     int res = mtd_spi_read_jedec_id(dev, &dev->jedec_id);
     if (res < 0) {

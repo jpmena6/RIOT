@@ -91,6 +91,8 @@ typedef struct {
     const mtd_spi_nor_opcode_t *opcode; /**< Opcode table for the device */
     spi_t spi;               /**< SPI bus the device is connected to */
     gpio_t cs;               /**< CS pin GPIO handle */
+    spi_mode_t mode;         /**< SPI mode */
+    spi_clk_t clk;           /**< SPI clock */
     uint16_t flag;           /**< Config flags */
     mtd_jedec_id_t jedec_id; /**< JEDEC ID of the chip */
     /**
