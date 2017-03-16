@@ -117,7 +117,8 @@ static ssize_t mtd_vfs_write(vfs_file_t *filp, const void *src, size_t nbytes)
     uint32_t size = mtd->page_size * mtd->sector_count * mtd->pages_per_sector;
     uint32_t dest = filp->pos;
     if (dest >= size) {
-        return 0;
+        /* attempt to write outside the device memory */
+        return -ENOSPC;
     }
     if ((dest + nbytes) > size) {
         nbytes = size - dest;
