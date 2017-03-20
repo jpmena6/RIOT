@@ -68,13 +68,12 @@ const mtd_desc_t mtd_spi_nor_driver = {
  * @param[out] dest   read buffer
  * @param[in]  count  number of bytes to read after the address has been sent
  */
-static int mtd_spi_cmd_addr_read(mtd_spi_nor_t *dev, uint8_t opcode,
+static void mtd_spi_cmd_addr_read(mtd_spi_nor_t *dev, uint8_t opcode,
     be_uint32_t addr, void* dest, uint32_t count)
 {
     TRACE("mtd_spi_cmd_addr_read: %p, %02x, (%02x %02x %02x %02x), %p, %" PRIu32 "\n",
         (void *)dev, (unsigned int)opcode, addr.u8[0], addr.u8[1], addr.u8[2],
         addr.u8[3], dest, count);
-    int status = 0;
 
     uint8_t *addr_buf = &addr.u8[4 - dev->addr_width];
     if (ENABLE_TRACE) {
@@ -99,8 +98,6 @@ static int mtd_spi_cmd_addr_read(mtd_spi_nor_t *dev, uint8_t opcode,
 
     /* Release the bus for other threads. */
     spi_release(dev->spi);
-
-    return status;
 }
 
 /**
@@ -113,13 +110,12 @@ static int mtd_spi_cmd_addr_read(mtd_spi_nor_t *dev, uint8_t opcode,
  * @param[out] src    write buffer
  * @param[in]  count  number of bytes to write after the opcode has been sent
  */
-static int mtd_spi_cmd_addr_write(mtd_spi_nor_t *dev, uint8_t opcode,
+static void mtd_spi_cmd_addr_write(mtd_spi_nor_t *dev, uint8_t opcode,
     be_uint32_t addr, const void* src, uint32_t count)
 {
     TRACE("mtd_spi_cmd_addr_write: %p, %02x, (%02x %02x %02x %02x), %p, %" PRIu32 "\n",
         (void *)dev, (unsigned int)opcode, addr.u8[0], addr.u8[1], addr.u8[2],
         addr.u8[3], src, count);
-    int status = 0;
 
     uint8_t *addr_buf = &addr.u8[4 - dev->addr_width];
     if (ENABLE_TRACE) {
@@ -145,8 +141,6 @@ static int mtd_spi_cmd_addr_write(mtd_spi_nor_t *dev, uint8_t opcode,
 
     /* Release the bus for other threads. */
     spi_release(dev->spi);
-
-    return status;
 }
 
 /**
@@ -158,11 +152,10 @@ static int mtd_spi_cmd_addr_write(mtd_spi_nor_t *dev, uint8_t opcode,
  * @param[out] dest   read buffer
  * @param[in]  count  number of bytes to write after the opcode has been sent
  */
-static int mtd_spi_cmd_read(mtd_spi_nor_t *dev, uint8_t opcode, void* dest, uint32_t count)
+static void mtd_spi_cmd_read(mtd_spi_nor_t *dev, uint8_t opcode, void* dest, uint32_t count)
 {
     TRACE("mtd_spi_cmd_read: %p, %02x, %p, %" PRIu32 "\n",
         (void *)dev, (unsigned int)opcode, dest, count);
-    int status = 0;
     /* Acquire exclusive access to the bus. */
     spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
@@ -170,7 +163,6 @@ static int mtd_spi_cmd_read(mtd_spi_nor_t *dev, uint8_t opcode, void* dest, uint
 
     /* Release the bus for other threads. */
     spi_release(dev->spi);
-    return status;
 }
 
 /**
@@ -182,11 +174,10 @@ static int mtd_spi_cmd_read(mtd_spi_nor_t *dev, uint8_t opcode, void* dest, uint
  * @param[out] src    write buffer
  * @param[in]  count  number of bytes to write after the opcode has been sent
  */
-static int __attribute__((unused)) mtd_spi_cmd_write(mtd_spi_nor_t *dev, uint8_t opcode, const void* src, uint32_t count)
+static void __attribute__((unused)) mtd_spi_cmd_write(mtd_spi_nor_t *dev, uint8_t opcode, const void* src, uint32_t count)
 {
     TRACE("mtd_spi_cmd_write: %p, %02x, %p, %" PRIu32 "\n",
         (void *)dev, (unsigned int)opcode, src, count);
-    int status = 0;
     /* Acquire exclusive access to the bus. */
     spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
@@ -194,7 +185,6 @@ static int __attribute__((unused)) mtd_spi_cmd_write(mtd_spi_nor_t *dev, uint8_t
 
     /* Release the bus for other threads. */
     spi_release(dev->spi);
-    return status;
 }
 
 /**
@@ -204,11 +194,10 @@ static int __attribute__((unused)) mtd_spi_cmd_write(mtd_spi_nor_t *dev, uint8_t
  * @param[in]  dev    pointer to device descriptor
  * @param[in]  opcode command opcode
  */
-static int mtd_spi_cmd(mtd_spi_nor_t *dev, uint8_t opcode)
+static void mtd_spi_cmd(mtd_spi_nor_t *dev, uint8_t opcode)
 {
     TRACE("mtd_spi_cmd: %p, %02x\n",
         (void *)dev, (unsigned int)opcode);
-    int status = 0;
     /* Acquire exclusive access to the bus. */
     spi_acquire(dev->spi, dev->cs, dev->mode, dev->clk);
 
@@ -216,7 +205,6 @@ static int mtd_spi_cmd(mtd_spi_nor_t *dev, uint8_t opcode)
 
     /* Release the bus for other threads. */
     spi_release(dev->spi);
-    return status;
 }
 
 /**
@@ -290,15 +278,12 @@ static int mtd_spi_read_jedec_id(mtd_spi_nor_t *dev, mtd_jedec_id_t *out)
     return status;
 }
 
-static inline int wait_for_write_complete(mtd_spi_nor_t *dev)
+static inline void wait_for_write_complete(mtd_spi_nor_t *dev)
 {
     do {
         uint8_t status;
-        int res = mtd_spi_cmd_read(dev, dev->opcode->rdsr, &status, sizeof(status));
-        if (res < 0) {
-            DEBUG("mtd_spi_nor: SPI error %d\n", res);
-            return -1;
-        }
+        mtd_spi_cmd_read(dev, dev->opcode->rdsr, &status, sizeof(status));
+
         TRACE("mtd_spi_nor: wait device status = 0x%02x\n", (unsigned int)status);
         if ((status & 1) == 0) { /* TODO magic number */
             break;
@@ -309,7 +294,6 @@ static inline int wait_for_write_complete(mtd_spi_nor_t *dev)
         thread_yield();
 #endif
     } while (1);
-    return 0;
 }
 
 static int mtd_spi_nor_init(mtd_dev_t *mtd)
@@ -346,7 +330,7 @@ static int mtd_spi_nor_init(mtd_dev_t *mtd)
         dev->jedec_id.bank, dev->jedec_id.manuf, dev->jedec_id.device[0], dev->jedec_id.device[1]);
 
     uint8_t status;
-    res = mtd_spi_cmd_read(dev, dev->opcode->rdsr, &status, sizeof(status));
+    mtd_spi_cmd_read(dev, dev->opcode->rdsr, &status, sizeof(status));
     DEBUG("mtd_spi_nor_init: device status = 0x%02x\n", (unsigned int)status);
 
     /* check whether page size and sector size are powers of two (most chips' are)
@@ -408,11 +392,8 @@ static int mtd_spi_nor_read(mtd_dev_t *mtd, void *dest, uint32_t addr, uint32_t 
         return 0;
     }
     be_uint32_t addr_be = byteorder_htonl(addr);
-    int res = mtd_spi_cmd_addr_read(dev, dev->opcode->read, addr_be, dest, size);
-    if (res < 0) {
-        DEBUG("mtd_spi_nor_read: SPI error %d\n", res);
-        return -EIO;
-    }
+    mtd_spi_cmd_addr_read(dev, dev->opcode->read, addr_be, dest, size);
+
     return size;
 }
 
@@ -435,19 +416,11 @@ static int mtd_spi_nor_write(mtd_dev_t *mtd, const void *src, uint32_t addr, uin
     }
     be_uint32_t addr_be = byteorder_htonl(addr);
 
-    int res;
     /* write enable */
-    res = mtd_spi_cmd(dev, dev->opcode->wren);
-    if (res < 0) {
-        DEBUG("mtd_spi_nor_write: wren SPI error %d\n", res);
-        return -EIO;
-    }
+    mtd_spi_cmd(dev, dev->opcode->wren);
+
     /* Page program */
-    res = mtd_spi_cmd_addr_write(dev, dev->opcode->page_program, addr_be, src, size);
-    if (res < 0) {
-        DEBUG("mtd_spi_nor_write: SPI error %d\n", res);
-        return -EIO;
-    }
+    mtd_spi_cmd_addr_write(dev, dev->opcode->page_program, addr_be, src, size);
 
     /* waiting for the command to complete before returning */
     wait_for_write_complete(dev);
@@ -472,43 +445,22 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
     }
     be_uint32_t addr_be = byteorder_htonl(addr);
 
-    int res;
     /* write enable */
-    res = mtd_spi_cmd(dev, dev->opcode->wren);
-    if (res < 0) {
-        DEBUG("mtd_spi_nor_erase: wren SPI error %d\n", res);
-        return -EIO;
-    }
+    mtd_spi_cmd(dev, dev->opcode->wren);
 
     if (size == total_size) {
-        res = mtd_spi_cmd_addr_write(dev, dev->opcode->chip_erase, addr_be, NULL, 0);
-        if (res < 0) {
-            DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
-            return -EIO;
-        }
+        mtd_spi_cmd_addr_write(dev, dev->opcode->chip_erase, addr_be, NULL, 0);
     }
     else if ((dev->flag & SPI_NOR_F_SECT_4K) && size == 4096) {
         /* 4 KiO sectors can be erased with sector erase command */
-        res = mtd_spi_cmd_addr_write(dev, dev->opcode->sector_erase, addr_be, NULL, 0);
-        if (res < 0) {
-            DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
-            return -EIO;
-        }
+        mtd_spi_cmd_addr_write(dev, dev->opcode->sector_erase, addr_be, NULL, 0);
     }
     else if ((dev->flag & SPI_NOR_F_SECT_32K) && size == 32768) {
         /* 4 KiO sectors can be erased with sector erase command */
-        res = mtd_spi_cmd_addr_write(dev, dev->opcode->block_erase_32k, addr_be, NULL, 0);
-        if (res < 0) {
-            DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
-            return -EIO;
-        }
+        mtd_spi_cmd_addr_write(dev, dev->opcode->block_erase_32k, addr_be, NULL, 0);
     }
     else {
-        res = mtd_spi_cmd_addr_write(dev, dev->opcode->block_erase, addr_be, NULL, 0);
-        if (res < 0) {
-            DEBUG("mtd_spi_nor_erase: SPI error %d\n", res);
-            return -EIO;
-        }
+        mtd_spi_cmd_addr_write(dev, dev->opcode->block_erase, addr_be, NULL, 0);
     }
 
     /* waiting for the command to complete before returning */
@@ -518,20 +470,15 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
 
 static int mtd_spi_nor_power(mtd_dev_t *mtd, enum mtd_power_state power)
 {
-    int res = 0;
     mtd_spi_nor_t *dev = (mtd_spi_nor_t *)mtd;
 
     switch (power) {
         case MTD_POWER_UP:
-            res = mtd_spi_cmd(dev, dev->opcode->wake);
+            mtd_spi_cmd(dev, dev->opcode->wake);
             break;
         case MTD_POWER_DOWN:
-            res = mtd_spi_cmd(dev, dev->opcode->sleep);
+            mtd_spi_cmd(dev, dev->opcode->sleep);
             break;
-    }
-
-    if (res < 0) {
-        return -EIO;
     }
 
     return 0;
