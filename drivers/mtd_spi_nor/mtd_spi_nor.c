@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2016 Eistec AB
+ *               2017 OTA keys S.A.
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -15,6 +16,7 @@
  * @brief       Driver for serial flash memory attached to SPI
  *
  * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
+ * @author      Vincent Dupont <vincent@otakeys.com>
  *
  * @}
  */
