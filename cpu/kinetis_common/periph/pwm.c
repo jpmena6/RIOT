@@ -28,6 +28,8 @@
 #include "assert.h"
 #include "periph/pwm.h"
 
+#ifdef FTM0
+
 #define PRESCALER_MAX       (7U)
 
 static inline FTM_Type *ftm(pwm_t pwm)
@@ -149,3 +151,5 @@ void pwm_poweroff(pwm_t pwm)
     }
 #endif
 }
+
+#endif /* defined(FTM0) */
