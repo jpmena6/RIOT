@@ -48,7 +48,7 @@ static devfs_t mulle_nvram_devfs = {
     .private_data = &mulle_nvram_dev,
 };
 
-mtd_spi_nor_t mulle_nor_dev = {
+static mtd_spi_nor_t mulle_nor_dev = {
     .base = {
         .driver = &mtd_spi_nor_driver,
         .page_size = 256,
@@ -153,6 +153,9 @@ void board_init(void)
         /* Increment boot counter */
         increase_boot_count();
     }
+
+    /* Initialize NOR flash */
+    mulle_nor_init();
 }
 
 static inline void power_pins_init(void)
