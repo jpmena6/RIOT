@@ -44,6 +44,10 @@
 #define TRACE(...)
 #endif
 
+#ifndef MTD_SPI_NOR_WRITE_WAIT_US
+#define MTD_SPI_NOR_WRITE_WAIT_US (50 * US_PER_MS)
+#endif
+
 static int mtd_spi_nor_init(mtd_dev_t *mtd);
 static int mtd_spi_nor_read(mtd_dev_t *mtd, void *dest, uint32_t addr, uint32_t size);
 static int mtd_spi_nor_write(mtd_dev_t *mtd, const void *src, uint32_t addr, uint32_t size);
@@ -289,7 +293,7 @@ static inline void wait_for_write_complete(mtd_spi_nor_t *dev)
             break;
         }
 #if MODULE_XTIMER
-        xtimer_usleep(50 * US_PER_MS); /* TODO magic number */
+        xtimer_usleep(MTD_SPI_NOR_WRITE_WAIT_US);
 #else
         thread_yield();
 #endif

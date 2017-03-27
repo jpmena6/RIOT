@@ -25,7 +25,7 @@
 #define MTD_SPI_NOR_H_
 
 #include <stdint.h>
-#include <stdbool.h>
+
 #include "periph_conf.h"
 #include "periph/spi.h"
 #include "periph/gpio.h"
