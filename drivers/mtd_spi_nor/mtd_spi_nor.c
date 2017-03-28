@@ -34,7 +34,7 @@
 #include "byteorder.h"
 #include "mtd_spi_nor.h"
 
-#define ENABLE_DEBUG    (1)
+#define ENABLE_DEBUG    (0)
 #include "debug.h"
 #define ENABLE_TRACE    (0)
 
