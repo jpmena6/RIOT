@@ -34,7 +34,7 @@
 #include "byteorder.h"
 #include "mtd_spi_nor.h"
 
-#define ENABLE_DEBUG    (0)
+#define ENABLE_DEBUG    (1)
 #include "debug.h"
 #define ENABLE_TRACE    (0)
 
@@ -436,7 +436,8 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
     DEBUG("mtd_spi_nor_erase: %p, 0x%" PRIx32 ", 0x%" PRIx32 "\n",
         (void *)mtd, addr, size);
     mtd_spi_nor_t *dev = (mtd_spi_nor_t *)mtd;
-    uint32_t total_size = mtd->page_size * mtd->pages_per_sector * mtd->sector_count;
+    uint32_t sector_size = mtd->page_size * mtd->pages_per_sector;
+    uint32_t total_size = sector_size * mtd->sector_count;
 
     if (dev->sec_addr_mask &&
         ((addr & ~dev->sec_addr_mask) != 0)) {
@@ -445,7 +446,7 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
         DEBUG("addr = %" PRIx32 " ~dev->erase_addr_mask = %" PRIx32 "", addr, ~dev->sec_addr_mask);
         DEBUG("mtd_spi_nor_erase: ERR: erase addr not aligned on %" PRIu32 " byte boundary.\n",
             sector_size);
-        return -EINVAL;
+        return -EOVERFLOW;
     }
     be_uint32_t addr_be = byteorder_htonl(addr);
 
@@ -462,6 +463,9 @@ static int mtd_spi_nor_erase(mtd_dev_t *mtd, uint32_t addr, uint32_t size)
     else if ((dev->flag & SPI_NOR_F_SECT_32K) && size == 32768) {
         /* 4 KiO sectors can be erased with sector erase command */
         mtd_spi_cmd_addr_write(dev, dev->opcode->block_erase_32k, addr_be, NULL, 0);
+    }
+    else if (size != sector_size) {
+        return -EOVERFLOW;
     }
     else {
         mtd_spi_cmd_addr_write(dev, dev->opcode->block_erase, addr_be, NULL, 0);
