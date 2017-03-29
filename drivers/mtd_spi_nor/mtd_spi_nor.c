@@ -136,9 +136,10 @@ static void mtd_spi_cmd_addr_write(mtd_spi_nor_t *dev, uint8_t opcode,
     do {
         /* Send opcode followed by address */
         spi_transfer_byte(dev->spi, dev->cs, true, opcode);
-        spi_transfer_bytes(dev->spi, dev->cs, true, (char *)addr_buf, NULL, dev->addr_width);
+        bool cont = (count > 0); /* only keep CS asserted when there is data that follows */
+        spi_transfer_bytes(dev->spi, dev->cs, cont, (char *)addr_buf, NULL, dev->addr_width);
         /* Write data */
-        if (count > 0) {
+        if (cont) {
             spi_transfer_bytes(dev->spi, dev->cs, false, (void *)src, NULL, count);
         }
     } while(0);
