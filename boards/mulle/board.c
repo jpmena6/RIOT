@@ -56,12 +56,14 @@ static mtd_spi_nor_t mulle_nor_dev = {
         .sector_count = 32,
     },
     .opcode = &mtd_spi_nor_opcode_default,
-    .spi = MULLE_NVRAM_SPI_DEV,
-    .cs = GPIO_PIN(PORT_D, 5),
+    .spi = MULLE_NOR_SPI_DEV,
+    .cs = MULLE_NOR_SPI_CS,
     .addr_width = 3,
+    .mode = SPI_MODE_3,
+    .clk = SPI_CLK_10MHZ,
 };
 
-mtd_dev_t *mulle_nor = (mtd_dev_t *)&mulle_nor_dev;
+mtd_dev_t *mtd0 = (mtd_dev_t *)&mulle_nor_dev;
 
 static devfs_t mulle_nor_devfs = {
     .path = "/mtd0",
@@ -268,7 +270,7 @@ static void increase_boot_count(void)
 
 int mulle_nor_init(void)
 {
-    int res = mtd_init(mulle_nor);
+    int res = mtd_init(mtd0);
 
     if (res >= 0) {
         /* Register DevFS node */
