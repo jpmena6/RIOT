@@ -62,22 +62,11 @@ extern "C"
 #define PIN_INTERRUPT_EDGE 0b1011
 /** @} */
 
-/** @name PORT module clock gates */
-/** @{ */
-#define PORTA_CLOCK_GATE (BITBAND_REG32(SIM->SCGC5, SIM_SCGC5_PORTA_SHIFT))
-#define PORTB_CLOCK_GATE (BITBAND_REG32(SIM->SCGC5, SIM_SCGC5_PORTB_SHIFT))
-#define PORTC_CLOCK_GATE (BITBAND_REG32(SIM->SCGC5, SIM_SCGC5_PORTC_SHIFT))
-#define PORTD_CLOCK_GATE (BITBAND_REG32(SIM->SCGC5, SIM_SCGC5_PORTD_SHIFT))
-#define PORTE_CLOCK_GATE (BITBAND_REG32(SIM->SCGC5, SIM_SCGC5_PORTE_SHIFT))
-/** @} */
-
 /**
  * @brief MCU specific Low Power Timer settings.
  */
-#define LPTIMER_CLKSRC                   LPTIMER_CLKSRC_LPO
-#define LPTIMER_DEV                      (LPTMR0) /**< LPTIMER hardware module */
-#define LPTIMER_CLKEN()                  (SIM->SCGC5 |= SIM_SCGC5_LPTMR_MASK) /**< Enable LPTMR0 clock gate */
-#define LPTIMER_CLKDIS()                 (SIM->SCGC5 &= ~SIM_SCGC5_PTMR_MASK) /**< Disable LPTMR0 clock gate */
+#define LPTIMER_DEV      (LPTMR0) /**< LPTIMER hardware module */
+#define LPTIMER_CLKEN()  (bit_set32(&SIM->SCGC5, SIM_SCGC5_LPTMR_SHIFT)) /**< Enable LPTMR0 clock gate */
 
 #ifdef __cplusplus
 }

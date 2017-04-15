@@ -129,7 +129,7 @@ static inline int pin_num(gpio_t pin)
 
 static inline void clk_en(gpio_t pin)
 {
-    BITBAND_REG32(SIM->SCGC5, SIM_SCGC5_PORTA_SHIFT + port_num(pin)) = 1;
+    bit_set32(&SIM->SCGC5, SIM_SCGC5_PORTA_SHIFT + port_num(pin));
 }
 
 /**

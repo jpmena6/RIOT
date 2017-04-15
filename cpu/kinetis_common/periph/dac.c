@@ -84,7 +84,12 @@ static inline void _dac_set_power(dac_t line, uint8_t value)
 
     dac = dac_config[line].dev;
 
-    BITBAND_REG8(dac->C0, DAC_C0_DACEN_SHIFT) = value;
+    if (value) {
+        bit_set8(&dac->C0, DAC_C0_DACEN_SHIFT);
+    }
+    else {
+        bit_clear8(&dac->C0, DAC_C0_DACEN_SHIFT);
+    }
 }
 
 void dac_poweron(dac_t line)
