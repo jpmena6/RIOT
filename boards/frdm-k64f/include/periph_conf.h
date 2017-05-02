@@ -68,11 +68,9 @@ extern "C"
 #define TIMER_NUMOF             ((PIT_NUMOF) + (LPTMR_NUMOF))
 
 #define PIT_BASECLOCK           (CLOCK_BUSCLOCK)
-#define PIT_CLKEN()             (bit_set32(&SIM->SCGC6, SIM_SCGC6_PIT_SHIFT))
 #define PIT_ISR_0               isr_pit1
 #define PIT_ISR_1               isr_pit3
 #define LPTMR_ISR_0             isr_lptmr0
-#define LPTMR_CLKEN()           (bit_set32(&SIM->SCGC5, SIM_SCGC5_LPTMR_SHIFT))
 
 /** @} */
 

@@ -72,36 +72,37 @@ extern "C"
  * @name Clock settings for the LPTMR0 timer
  * @{
  */
-#define LPTIMER_DEV              (LPTMR0) /**< LPTIMER hardware module */
-#define LPTIMER_CLKEN()          (bit_set32(&SIM->SCGC5, SIM_SCGC5_LPTMR_SHIFT))    /**< Enable LPTMR0 clock gate */
-#define LPTIMER_CLKSRC_MCGIRCLK  0    /**< internal reference clock (4MHz) */
-#define LPTIMER_CLKSRC_LPO       1    /**< PMC 1kHz output */
-#define LPTIMER_CLKSRC_ERCLK32K  2    /**< RTC clock 32768Hz */
-#define LPTIMER_CLKSRC_OSCERCLK  3    /**< system oscillator output */
+#define LPTMR_CLKEN() (bit_set32(&SIM->SCGC5, SIM_SCGC5_LPTMR_SHIFT)) /**< Enable LPTMR0 clock gate */
+#define LPTMR_CLKSRC_MCGIRCLK  0    /**< internal reference clock (4MHz) */
+#define LPTMR_CLKSRC_LPO       1    /**< PMC 1kHz output */
+#define LPTMR_CLKSRC_ERCLK32K  2    /**< RTC clock 32768Hz */
+#define LPTMR_CLKSRC_OSCERCLK  3    /**< system oscillator output */
 
-#ifndef LPTIMER_CLKSRC
-#define LPTIMER_CLKSRC           LPTIMER_CLKSRC_ERCLK32K    /**< default clock source */
+#ifndef LPTMR_CLKSRC
+#define LPTMR_CLKSRC           LPTIMER_CLKSRC_ERCLK32K    /**< default clock source */
 #endif
 
-#if (LPTIMER_CLKSRC == LPTIMER_CLKSRC_MCGIRCLK)
-#define LPTIMER_CLK_PRESCALE    1
-#define LPTIMER_SPEED           1000000
-#elif (LPTIMER_CLKSRC == LPTIMER_CLKSRC_OSCERCLK)
-#define LPTIMER_CLK_PRESCALE    1
-#define LPTIMER_SPEED           1000000
-#elif (LPTIMER_CLKSRC == LPTIMER_CLKSRC_ERCLK32K)
-#define LPTIMER_CLK_PRESCALE    0
-#define LPTIMER_SPEED           32768
+#if (LPTMR_CLKSRC == LPTMR_CLKSRC_MCGIRCLK)
+#define LPTMR_CLK_PRESCALE    1
+#define LPTMR_SPEED           1000000
+#elif (LPTMR_CLKSRC == LPTMR_CLKSRC_OSCERCLK)
+#define LPTMR_CLK_PRESCALE    1
+#define LPTMR_SPEED           1000000
+#elif (LPTMR_CLKSRC == LPTMR_CLKSRC_ERCLK32K)
+#define LPTMR_CLK_PRESCALE    0
+#define LPTMR_SPEED           32768
 #else
-#define LPTIMER_CLK_PRESCALE    0
-#define LPTIMER_SPEED           1000
+#define LPTMR_CLK_PRESCALE    0
+#define LPTMR_SPEED           1000
 #endif
 
-/** IRQ priority for hwtimer interrupts */
-#define LPTIMER_IRQ_PRIO          1
-/** IRQ channel for hwtimer interrupts */
-#define LPTIMER_IRQ_CHAN          LPTMR0_IRQn
+/** @} */
 
+/**
+ * @name PIT module configuration
+ */
+/** @{ */
+#define PIT_CLKEN()    (bit_set32(&SIM->SCGC6, SIM_SCGC6_PIT_SHIFT)) /**< Enable PIT clock gate */
 /** @} */
 
 /**
