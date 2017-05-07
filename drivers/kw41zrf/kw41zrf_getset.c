@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 PHYTEC Messtechnik GmbH
+ * Copyright (C) 2017 SKF AB
  *
  * This file is subject to the terms and conditions of the GNU Lesser General
  * Public License v2.1. See the file LICENSE in the top level directory for more
@@ -7,10 +7,10 @@
  */
 
 /**
- * @ingroup     drivers_kw2xrf
+ * @ingroup     drivers_kw41zrf
  * @{
  * @file
- * @brief       get/set functionality of kw2xrf driver
+ * @brief       get/set functionality of kw41zrf driver
  *
  * @author      Johann Fischer <j.fischer@phytec.de>
  * @author      Jonas Remmert <j.remmert@phytec.de>
@@ -19,215 +19,111 @@
  * @}
  */
 
+#include <errno.h>
 #include "log.h"
-#include "kw2xrf.h"
-#include "kw2xrf_spi.h"
-#include "kw2xrf_reg.h"
-#include "kw2xrf_getset.h"
-#include "kw2xrf_intern.h"
+#include "cpu.h"
+#include "kw41zrf.h"
+#include "kw41zrf_getset.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-#define KW2XRF_LQI_HW_MAX           230      /**< LQI Saturation Level */
+#define KW41ZRF_LQI_HW_MAX           230      /**< LQI Saturation Level */
 
 /* Modem_PA_PWR Register (PA Power Control) has a valid range from 3-31 */
-#define KW2XRF_PA_RANGE_MAX      31       /**< Maximum value of PA Power Control Register */
-#define KW2XRF_PA_RANGE_MIN      3        /**< Minimum value of PA Power Control Register */
+#define KW41ZRF_PA_RANGE_MAX      31       /**< Maximum value of PA Power Control Register */
+#define KW41ZRF_PA_RANGE_MIN      3        /**< Minimum value of PA Power Control Register */
 
-#define KW2XRF_NUM_CHANNEL      (KW2XRF_MAX_CHANNEL - KW2XRF_MIN_CHANNEL + 1)
+#define KW41ZRF_NUM_CHANNEL      (KW41ZRF_MAX_CHANNEL - KW41ZRF_MIN_CHANNEL + 1)
 
-/* PLL integer and fractional lookup tables
- *
- * Fc = 2405 + 5(k - 11) , k = 11,12,...,26
- *
- * Equation for PLL frequency, MKW2xD Reference Manual, p.255 :
- * F = ((PLL_INT0 + 64) + (PLL_FRAC0/65536))32MHz
- *
- */
-static const uint8_t pll_int_lt[16] = {
-    11, 11, 11, 11,
-    11, 11, 12, 12,
-    12, 12, 12, 12,
-    13, 13, 13, 13
+/* Lookup table for PA_PWR register */
+static const uint8_t pa_pwr_lt[22] = {
+    2, 2, 2, 2, 2, 2,  /* -19:-14 dBm */
+    4, 4, 4,           /* -13:-11 dBm */
+    6, 6, 6,           /* -10:-8 dBm */
+    8, 8,              /* -7:-6 dBm */
+    10, 10,            /* -5:-4 dBm */
+    12,                /* -3 dBm */
+    14, 14,            /* -2:-1 dBm */
+    18, 18,            /* 0:1 dBm */
+    24                 /* 2 dBm */
 };
 
-static const uint16_t pll_frac_lt[16] = {
-    10240, 20480, 30720, 40960,
-    51200, 61440, 6144, 16384,
-    26624, 36864, 47104, 57344,
-    2048, 12288, 22528, 32768
+/** @brief Transceiver sequence identifiers */
+enum kw41zrf_xcvseq {
+    XCVSEQ_IDLE           = 0b000,
+    XCVSEQ_RECEIVE        = 0b001,
+    XCVSEQ_TRANSMIT       = 0b010,
+    XCVSEQ_CCA            = 0b011,
+    XCVSEQ_TX_RX          = 0b100,
+    XCVSEQ_CONTINUOUS_CCA = 0b101,
+    /* Other values are reserved */
 };
 
-static const uint8_t pow_lt[44] = {
-    3, 4, 4, 5,
-    6, 6, 7, 7,
-    8, 9, 9, 10,
-    11, 11, 12, 13,
-    13, 14, 14, 15,
-    16, 16, 17, 18,
-    18, 19, 20, 20,
-    21, 21, 22, 23,
-    23, 24, 25, 25,
-    26, 27, 27, 28,
-    28, 29, 30, 31
-};
-
-void kw2xrf_set_tx_power(kw2xrf_t *dev, int16_t txpower)
+void kw41zrf_set_tx_power(kw41zrf_t *dev, int16_t txpower_dbm)
 {
-    if (txpower > KW2XDRF_OUTPUT_POWER_MAX) {
-        txpower = KW2XDRF_OUTPUT_POWER_MAX;
+    if (txpower_dbm < KW41ZRF_OUTPUT_POWER_MIN) {
+        ZLL->PA_PWR = 0;
+    }
+    else if (txpower_dbm > KW41ZRF_OUTPUT_POWER_MAX) {
+        ZLL->PA_PWR = 30;
+    }
+    else {
+        ZLL->PA_PWR = pa_pwr_lt[txpower_dbm - KW41ZRF_OUTPUT_POWER_MIN];
     }
 
-    if (txpower < KW2XDRF_OUTPUT_POWER_MIN) {
-        txpower = KW2XDRF_OUTPUT_POWER_MIN;
-    }
-
-    uint8_t level = pow_lt[txpower - KW2XDRF_OUTPUT_POWER_MIN];
-    kw2xrf_write_dreg(dev, MKW2XDM_PA_PWR, MKW2XDM_PA_PWR(level));
-    LOG_DEBUG("[kw2xrf] set txpower to: %d\n", txpower);
-    dev->tx_power = txpower;
+    LOG_DEBUG("[kw41zrf] set txpower to: %d\n", txpower_dbm);
+    dev->tx_power = txpower_dbm;
 }
 
-uint16_t kw2xrf_get_txpower(kw2xrf_t *dev)
+uint16_t kw41zrf_get_txpower(kw41zrf_t *dev)
 {
     return dev->tx_power;
 }
 
-uint8_t kw2xrf_get_channel(kw2xrf_t *dev)
+uint8_t kw41zrf_get_channel(kw41zrf_t *dev)
 {
-    uint8_t pll_int = kw2xrf_read_dreg(dev, MKW2XDM_PLL_INT0);
-    uint16_t pll_frac = kw2xrf_read_dreg(dev, MKW2XDM_PLL_FRAC0_LSB);
-    pll_frac |= ((uint16_t)kw2xrf_read_dreg(dev, MKW2XDM_PLL_FRAC0_MSB) << 8);
+    return (ZLL->CHANNEL_NUM0 & ZLL_CHANNEL_NUM0_CHANNEL_NUM0_MASK);
+}
 
-    for (unsigned i = 0; i < KW2XRF_NUM_CHANNEL; i++) {
-        if ((pll_frac_lt[i] == pll_frac) && (pll_int_lt[i] == pll_int)) {
-            return i + 11;
-        }
+int kw41zrf_set_channel(kw41zrf_t *dev, uint8_t channel)
+{
+    if (channel < KW41ZRF_MIN_CHANNEL || channel > KW41ZRF_MAX_CHANNEL) {
+        LOG_ERROR("[kw41zrf] Invalid channel %u\n", channel);
+        return -EINVAL;
     }
+
+    ZLL->CHANNEL_NUM0 = channel;
+
+    LOG_DEBUG("[kw41zrf] set channel to %u\n", channel);
     return 0;
 }
 
-static int kw2xrf_get_sequence(kw2xrf_t *dev)
+inline void kw41zrf_abort_sequence(kw41zrf_t *dev)
 {
-    int reg = 0;
-    reg = kw2xrf_read_dreg(dev, MKW2XDM_PHY_CTRL1);
-    reg &= MKW2XDM_PHY_CTRL1_XCVSEQ_MASK;
-    return reg;
-}
-
-int kw2xrf_set_channel(kw2xrf_t *dev, uint8_t channel)
-{
-    /* Save old sequence to restore this state later */
-    uint8_t old_seq = kw2xrf_get_sequence(dev);
-
-    if (channel < KW2XRF_MIN_CHANNEL || channel > KW2XRF_MAX_CHANNEL) {
-        LOG_ERROR("[kw2xrf] Invalid channel %u\n", channel);
-        return -1;
-    }
-
-    if (old_seq) {
-        kw2xrf_abort_sequence(dev);
-    }
-
-    uint8_t tmp = channel - 11;
-    kw2xrf_write_dreg(dev, MKW2XDM_PLL_INT0, MKW2XDM_PLL_INT0_VAL(pll_int_lt[tmp]));
-    kw2xrf_write_dreg(dev, MKW2XDM_PLL_FRAC0_LSB, (uint8_t)pll_frac_lt[tmp]);
-    kw2xrf_write_dreg(dev, MKW2XDM_PLL_FRAC0_MSB, (uint8_t)(pll_frac_lt[tmp] >> 8));
-
-    dev->netdev.chan = channel;
-
-    if (old_seq) {
-        kw2xrf_set_sequence(dev, old_seq);
-    }
-
-    LOG_DEBUG("[kw2xrf] set channel to %u\n", channel);
-    return 0;
-}
-
-void kw2xrf_abort_sequence(kw2xrf_t *dev)
-{
-    uint8_t regs[MKW2XDM_PHY_CTRL4 + 1];
-
-    kw2xrf_mask_irq_b(dev);
-    kw2xrf_read_dregs(dev, MKW2XDM_IRQSTS1, regs, (MKW2XDM_PHY_CTRL4 + 1));
-
-    if ((regs[MKW2XDM_PHY_CTRL1] & MKW2XDM_PHY_CTRL1_XCVSEQ_MASK) != XCVSEQ_IDLE) {
-        /* abort any ongoing sequence */
-        regs[MKW2XDM_PHY_CTRL1] &= ~(MKW2XDM_PHY_CTRL1_XCVSEQ_MASK);
-        kw2xrf_write_dreg(dev, MKW2XDM_PHY_CTRL1, regs[MKW2XDM_PHY_CTRL1]);
-    }
-
-    uint8_t state;
-    do {
-        state = kw2xrf_read_dreg(dev, MKW2XDM_SEQ_STATE);
-        DEBUG("[kw2xrf] abort SEQ_STATE: %x\n", state);
-    } while ((state & 0x1F) != 0);
-
-    /* clear all IRQ bits */
-    regs[MKW2XDM_IRQSTS1] = 0x7f;
-    regs[MKW2XDM_IRQSTS2] = 0x03;
-    regs[MKW2XDM_IRQSTS3] |= 0x0f;
-    kw2xrf_write_dregs(dev, MKW2XDM_IRQSTS1, regs, 3);
-
-    kw2xrf_enable_irq_b(dev);
+    /* Writing IDLE to XCVSEQ aborts any ongoing sequence */
+    ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ(XCVSEQ_IDLE);
 }
 
 /*
  * Simplified version for irq handling where the state of
- * the sequenz manager is known.
+ * the sequence manager is known.
  */
-void kw2xrf_set_idle_sequence(kw2xrf_t *dev)
+void kw41zrf_set_idle_sequence(kw41zrf_t *dev)
 {
-    kw2xrf_mask_irq_b(dev);
-    uint8_t reg = kw2xrf_read_dreg(dev, MKW2XDM_PHY_CTRL1);
-
-    /* reset sequenz manager */
-    reg &= ~(MKW2XDM_PHY_CTRL1_XCVSEQ_MASK);
-    kw2xrf_write_dreg(dev, MKW2XDM_PHY_CTRL1, reg);
-
-    if (dev->pending_tx) {
-        DEBUG("[kw2xrf] pending tx, cannot set idle sequenz\n");
-        return;
-    }
-
-    /* start new sequenz */
-    reg |= MKW2XDM_PHY_CTRL1_XCVSEQ(dev->idle_state);
-    kw2xrf_write_dreg(dev, MKW2XDM_PHY_CTRL1, reg);
-
-    switch (dev->idle_state) {
-        case XCVSEQ_IDLE:
-        /* for inexplicable reasons, the receive mode is also idle mode */
-        case XCVSEQ_RECEIVE:
-            dev->state = NETOPT_STATE_IDLE;
-            break;
-
-        case XCVSEQ_CONTINUOUS_CCA:
-        case XCVSEQ_CCA:
-            dev->state = NETOPT_STATE_RX;
-            break;
-
-        case XCVSEQ_TRANSMIT:
-        case XCVSEQ_TX_RX:
-            dev->state = NETOPT_STATE_TX;
-            break;
-
-        default:
-            dev->state = NETOPT_STATE_IDLE;
-    }
-    kw2xrf_enable_irq_b(dev);
+    kw41zrf_mask_irq_b(dev);
+    kw41zrf_set_sequence(dev, dev->idle_state);
+    kw41zrf_enable_irq_b(dev);
 }
 
-void kw2xrf_set_sequence(kw2xrf_t *dev, kw2xrf_physeq_t seq)
+void kw41zrf_set_sequence(kw41zrf_t *dev, uint8_t seq)
 {
-    uint8_t reg = 0;
-
-    kw2xrf_abort_sequence(dev);
+    kw41zrf_abort_sequence(dev);
 
     switch (seq) {
         case XCVSEQ_IDLE:
-        /* for inexplicable reasons, the receive mode is also idle mode */
         case XCVSEQ_RECEIVE:
+            /* TODO why is RX == IDLE??? */
             dev->state = NETOPT_STATE_IDLE;
             break;
 
@@ -242,112 +138,98 @@ void kw2xrf_set_sequence(kw2xrf_t *dev, kw2xrf_physeq_t seq)
             break;
 
         default:
-            DEBUG("[kw2xrf] undefined state assigned to phy\n");
+            DEBUG("[kw41zrf] undefined state assigned to phy\n");
             dev->state = NETOPT_STATE_IDLE;
     }
 
-    DEBUG("[kw2xrf] set sequence to %i\n", seq);
-    reg = kw2xrf_read_dreg(dev, MKW2XDM_PHY_CTRL1);
-    reg &= ~(MKW2XDM_PHY_CTRL1_XCVSEQ_MASK);
-    reg |= MKW2XDM_PHY_CTRL1_XCVSEQ(seq);
-    kw2xrf_write_dreg(dev, MKW2XDM_PHY_CTRL1, reg);
+    DEBUG("[kw41zrf] set sequence to %u\n", (unsigned int)seq);
+    ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ(seq);
 }
 
-void kw2xrf_set_pan(kw2xrf_t *dev, uint16_t pan)
+void kw41zrf_set_pan(kw41zrf_t *dev, uint16_t pan)
 {
     dev->netdev.pan = pan;
 
-    uint8_t val_ar[2];
-    val_ar[1] = (pan >> 8);
-    val_ar[0] = (uint8_t)pan;
-    kw2xrf_write_iregs(dev, MKW2XDMI_MACPANID0_LSB, val_ar, 2);
-    LOG_DEBUG("[kw2xrf] set pan to: 0x%x\n", pan);
+    ZLL->MACSHORTADDRS0 = (ZLL->MACSHORTADDRS0 & ~ZLL_MACSHORTADDRS0_MACPANID0_MASK) |
+        ZLL_MACSHORTADDRS0_MACPANID0(pan_id);
+
+    LOG_DEBUG("[kw41zrf] set pan to: 0x%x\n", pan);
     dev->netdev.pan = pan;
 }
 
-void kw2xrf_set_addr_short(kw2xrf_t *dev, uint16_t addr)
+void kw41zrf_set_addr_short(kw41zrf_t *dev, uint16_t addr)
 {
-    uint8_t val_ar[2];
-    val_ar[0] = (addr >> 8);
-    val_ar[1] = (uint8_t)addr;
-    dev->netdev.short_addr[0] = val_ar[1];
-    dev->netdev.short_addr[1] = val_ar[0];
 #ifdef MODULE_SIXLOWPAN
     /* https://tools.ietf.org/html/rfc4944#section-12 requires the first bit to
      * 0 for unicast addresses */
-    dev->netdev.short_addr[1] &= 0x7F;
+    addr &= 0x7fff;
 #endif
-    kw2xrf_write_iregs(dev, MKW2XDMI_MACSHORTADDRS0_LSB, val_ar,
-                       IEEE802154_SHORT_ADDRESS_LEN);
+    /* Network byte order */
+    /* TODO use byteorder.h */
+    dev->netdev.short_addr[0] = (addr & 0xff);
+    dev->netdev.short_addr[1] = (addr >> 8);
+    ZLL->MACSHORTADDRS0 = (ZLL->MACSHORTADDRS0 & ~ZLL_MACSHORTADDRS0_MACSHORTADDRS0_MASK) |
+        ZLL_MACSHORTADDRS0_MACSHORTADDRS0(addr);
 }
 
-void kw2xrf_set_addr_long(kw2xrf_t *dev, uint64_t addr)
+void kw41zrf_set_addr_long(kw41zrf_t *dev, uint64_t addr)
 {
-    uint64_t tmp;
-    uint8_t *ap = (uint8_t *)(&tmp);
+    (void) dev;
+    ZLL->MACLONGADDRS0_LSB = (uint32_t)addr;
+    ZLL->MACLONGADDRS0_MSB = (addr >> 32);
 
     for (unsigned i = 0; i < IEEE802154_LONG_ADDRESS_LEN; i++) {
         dev->netdev.long_addr[i] = (uint8_t)(addr >> (i * 8));
-        ap[i] = (addr >> ((IEEE802154_LONG_ADDRESS_LEN - 1 - i) * 8));
     }
-
-    kw2xrf_write_iregs(dev, MKW2XDMI_MACLONGADDRS0_0, ap,
-                       IEEE802154_LONG_ADDRESS_LEN);
 }
 
-uint16_t kw2xrf_get_addr_short(kw2xrf_t *dev)
+uint16_t kw41zrf_get_addr_short(kw41zrf_t *dev)
 {
-    return (dev->netdev.short_addr[0] << 8) | dev->netdev.short_addr[1];
+    (void) dev;
+    return (ZLL->MACSHORTADDRS0 & ZLL_MACSHORTADDRS0_MACSHORTADDRS0_MASK) >>
+        ZLL_MACSHORTADDRS0_MACSHORTADDRS0_SHIFT;
 }
 
-uint64_t kw2xrf_get_addr_long(kw2xrf_t *dev)
+uint64_t kw41zrf_get_addr_long(kw41zrf_t *dev)
 {
-    uint64_t addr;
-    uint8_t *ap = (uint8_t *)(&addr);
-
-    kw2xrf_read_iregs(dev, MKW2XDMI_MACLONGADDRS0_0, ap,
-                      IEEE802154_LONG_ADDRESS_LEN);
+    (void) dev;
+    uint64_t addr = ((uint64_t)ZLL->MACLONGADDRS0_MSB << 32) | ZLL->MACLONGADDRS0_LSB;
 
     return addr;
 }
 
-int8_t kw2xrf_get_cca_threshold(kw2xrf_t *dev)
+int8_t kw41zrf_get_cca_threshold(kw41zrf_t *dev)
 {
-    uint8_t tmp;
-    kw2xrf_read_iregs(dev, MKW2XDMI_CCA1_THRESH, &tmp, 1);
-    /* KW2x register value represents absolute value in dBm
-     * default value: -75 dBm
-     */
-    return (-tmp);
+    (void) dev;
+    uint8_t tmp = (ZLL->CCA_LQI_CTRL & ZLL_CCA_LQI_CTRL_CCA1_THRESH_MASK);
+    return (int8_t)tmp;
 }
 
-void kw2xrf_set_cca_threshold(kw2xrf_t *dev, int8_t value)
+void kw41zrf_set_cca_threshold(kw41zrf_t *dev, int8_t value)
 {
-    /* normalize to absolute value */
-    if (value < 0) {
-        value = -value;
-    }
-    kw2xrf_write_iregs(dev, MKW2XDMI_CCA1_THRESH, (uint8_t*)&value, 1);
+    (void) dev;
+    ZLL->CCA_LQI_CTRL = (ZLL->CCA_LQI_CTRL & ~ZLL_CCA_LQI_CTRL_CCA1_THRESH_MASK) |
+        ZLL_CCA_LQI_CTRL_CCA1_THRESH(value);
 }
 
-void kw2xrf_set_cca_mode(kw2xrf_t *dev, uint8_t mode)
+void kw41zrf_set_cca_mode(kw41zrf_t *dev, uint8_t mode)
 {
-    uint8_t tmp;
-    tmp = kw2xrf_read_dreg(dev, MKW2XDM_PHY_CTRL4);
-    tmp &= ~MKW2XDM_PHY_CTRL4_CCATYPE_MASK;
-    tmp |= MKW2XDM_PHY_CTRL4_CCATYPE(mode);
-    kw2xrf_write_dreg(dev, MKW2XDM_PHY_CTRL4, tmp);
+    (void) dev;
+    ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_CCATYPE_MASK) |
+        ZLL_PHY_CTRL_CCATYPE(mode);
 }
 
-uint8_t kw2xrf_get_cca_mode(kw2xrf_t *dev)
+uint8_t kw41zrf_get_cca_mode(kw41zrf_t *dev)
 {
-    uint8_t tmp;
-    tmp = kw2xrf_read_dreg(dev, MKW2XDM_PHY_CTRL4);
-    return (tmp & MKW2XDM_PHY_CTRL4_CCATYPE_MASK) >> MKW2XDM_PHY_CTRL4_CCATYPE_SHIFT;
+    (void) dev;
+    return (ZLL->PHY_CTRL & ZLL_PHY_CTRL_CCATYPE_MASK) >> ZLL_PHY_CTRL_CCATYPE_SHIFT;
 }
 
-uint32_t kw2xrf_get_rssi(uint32_t value)
+uint32_t kw41zrf_get_rssi(uint32_t value)
 {
+    /** TODO RSSI algorithm */
+    return value;
+#if 0
     /* Get rssi (Received Signal Strength Indicator, unit is dBm)
      * from lqi (Link Quality Indicator) value.
      * There are two different equations for RSSI:
@@ -362,11 +244,12 @@ uint32_t kw2xrf_get_rssi(uint32_t value)
     uint32_t a = (uint32_t)(295.4 * 65536 / 2.84);
     uint32_t b = (uint32_t)(65536 / 2.84);
     return (a - (b * value)) >> 16;
+#endif
 }
 
-void kw2xrf_set_option(kw2xrf_t *dev, uint16_t option, bool state)
+void kw41zrf_set_option(kw41zrf_t *dev, uint16_t option, bool state)
 {
-    DEBUG("[kw2xrf] set option %i to %i\n", option, state);
+    DEBUG("[kw41zrf] set option %i to %i\n", option, state);
 
     /* set option field */
     if (state) {
@@ -374,48 +257,47 @@ void kw2xrf_set_option(kw2xrf_t *dev, uint16_t option, bool state)
 
         /* trigger option specific actions */
         switch (option) {
-            case KW2XRF_OPT_AUTOCCA:
-                LOG_DEBUG("[kw2xrf] opt: enabling CCA before TX mode\n");
-                kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                    MKW2XDM_PHY_CTRL1_CCABFRTX);
+            case KW41ZRF_OPT_AUTOCCA:
+                LOG_DEBUG("[kw41zrf] enable: AUTOCCA\n");
+                bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_CCABFRTX_SHIFT);
                 break;
 
-            case KW2XRF_OPT_PROMISCUOUS:
-                LOG_DEBUG("[kw2xrf] opt: enabling PROMISCUOUS mode\n");
+            case KW41ZRF_OPT_PROMISCUOUS:
+                LOG_DEBUG("[kw41zrf] enable: PROMISCUOUS\n");
                 /* disable auto ACKs in promiscuous mode */
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                    MKW2XDM_PHY_CTRL1_AUTOACK | MKW2XDM_PHY_CTRL1_RXACKRQD);
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_AUTOACK_SHIFT);
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXACKRQD_SHIFT);
                 /* enable promiscuous mode */
-                kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL4,
-                    MKW2XDM_PHY_CTRL4_PROMISCUOUS);
+                bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_PROMISCUOUS_SHIFT);
                 break;
 
-            case KW2XRF_OPT_AUTOACK:
-                kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                    MKW2XDM_PHY_CTRL1_AUTOACK);
+            case KW41ZRF_OPT_AUTOACK:
+                LOG_DEBUG("[kw41zrf] enable: AUTOACK\n");
+                bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_AUTOACK_SHIFT);
                 break;
 
-            case KW2XRF_OPT_ACK_REQ:
-                kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                    MKW2XDM_PHY_CTRL1_RXACKRQD);
+            case KW41ZRF_OPT_ACK_REQ:
+                LOG_DEBUG("[kw41zrf] enable: ACK_REQ\n");
+                bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXACKRQD_SHIFT);
                 break;
 
-            case KW2XRF_OPT_TELL_RX_START:
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL2,
-                    MKW2XDM_PHY_CTRL2_RX_WMRK_MSK);
+            case KW41ZRF_OPT_TELL_RX_START:
+                LOG_DEBUG("[kw41zrf] enable: TELL_RX_START\n");
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RX_WMRK_MSK_SHIFT);
                 break;
 
-            case KW2XRF_OPT_TELL_RX_END:
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL2,
-                    MKW2XDM_PHY_CTRL2_RXMSK);
+            case KW41ZRF_OPT_TELL_RX_END:
+                LOG_DEBUG("[kw41zrf] enable: TELL_RX_END\n");
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXMSK_SHIFT);
                 break;
 
-            case KW2XRF_OPT_TELL_TX_END:
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL2,
-                    MKW2XDM_PHY_CTRL2_TXMSK);
+            case KW41ZRF_OPT_TELL_TX_END:
+                LOG_DEBUG("[kw41zrf] enable: TELL_TX_END\n");
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TXMSK_SHIFT);
                 break;
 
-            case KW2XRF_OPT_TELL_TX_START:
+            case KW41ZRF_OPT_TELL_TX_START:
+                LOG_DEBUG("[kw41zrf] enable: TELL_TX_START (ignored)\n");
             default:
                 /* do nothing */
                 break;
@@ -425,53 +307,51 @@ void kw2xrf_set_option(kw2xrf_t *dev, uint16_t option, bool state)
         dev->netdev.flags &= ~(option);
         /* trigger option specific actions */
         switch (option) {
-            case KW2XRF_OPT_AUTOCCA:
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                    MKW2XDM_PHY_CTRL1_CCABFRTX);
+            case KW41ZRF_OPT_AUTOCCA:
+                LOG_DEBUG("[kw41zrf] disable: AUTOCCA\n");
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_CCABFRTX_SHIFT);
                 break;
 
-            case KW2XRF_OPT_PROMISCUOUS:
+            case KW41ZRF_OPT_PROMISCUOUS:
+                LOG_DEBUG("[kw41zrf] disable: PROMISCUOUS\n");
                 /* disable promiscuous mode */
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL4,
-                    MKW2XDM_PHY_CTRL4_PROMISCUOUS);
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_PROMISCUOUS_SHIFT);
                 /* re-enable AUTOACK only if the option is set */
-                if (dev->netdev.flags & KW2XRF_OPT_AUTOACK) {
-                    kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                        MKW2XDM_PHY_CTRL1_AUTOACK);
+                if (dev->netdev.flags & KW41ZRF_OPT_AUTOACK) {
+                    bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_AUTOACK_SHIFT);
                 }
-                if (dev->netdev.flags & KW2XRF_OPT_ACK_REQ) {
-                    kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                        MKW2XDM_PHY_CTRL1_RXACKRQD);
+                if (dev->netdev.flags & KW41ZRF_OPT_ACK_REQ) {
+                    bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXACKRQD_SHIFT);
                 }
                 break;
 
-            case KW2XRF_OPT_AUTOACK:
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                    MKW2XDM_PHY_CTRL1_AUTOACK);
+            case KW41ZRF_OPT_AUTOACK:
+                LOG_DEBUG("[kw41zrf] disable: AUTOACK\n");
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_AUTOACK_SHIFT);
                 break;
 
-            case KW2XRF_OPT_ACK_REQ:
-                kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL1,
-                    MKW2XDM_PHY_CTRL1_RXACKRQD);
+            case KW41ZRF_OPT_ACK_REQ:
+                LOG_DEBUG("[kw41zrf] disable: ACK_REQ\n");
+                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXACKRQD_SHIFT);
                 break;
 
-            case KW2XRF_OPT_TELL_RX_START:
-                kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL2,
-                    MKW2XDM_PHY_CTRL2_RX_WMRK_MSK);
+            case KW41ZRF_OPT_TELL_RX_START:
+                LOG_DEBUG("[kw41zrf] disable: TELL_RX_START\n");
+                bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RX_WMRK_MSK_SHIFT);
                 break;
 
-            case KW2XRF_OPT_TELL_RX_END:
-                kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL2,
-                    MKW2XDM_PHY_CTRL2_RXMSK);
+            case KW41ZRF_OPT_TELL_RX_END:
+                LOG_DEBUG("[kw41zrf] disable: TELL_RX_END\n");
+                bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXMSK_SHIFT);
                 break;
 
-            case KW2XRF_OPT_TELL_TX_END:
-                kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL2,
-                    MKW2XDM_PHY_CTRL2_TXMSK);
+            case KW41ZRF_OPT_TELL_TX_END:
+                LOG_DEBUG("[kw41zrf] disable: TELL_TX_END\n");
+                bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TXMSK_SHIFT);
                 break;
 
-
-            case KW2XRF_OPT_TELL_TX_START:
+            case KW41ZRF_OPT_TELL_TX_START:
+                LOG_DEBUG("[kw41zrf] disable: TELL_TX_START (ignored)\n");
             default:
                 /* do nothing */
                 break;
@@ -479,11 +359,14 @@ void kw2xrf_set_option(kw2xrf_t *dev, uint16_t option, bool state)
     }
 }
 
-netopt_state_t kw2xrf_get_status(kw2xrf_t *dev)
+netopt_state_t kw41zrf_get_status(kw41zrf_t *dev)
 {
-    uint8_t reg = kw2xrf_read_dreg(dev, MKW2XDM_PHY_CTRL1);
+    uint32_t seq = (ZLL->PHY_CTRL & ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ_SHIFT;
 
-    switch (reg & MKW2XDM_PHY_CTRL1_XCVSEQ_MASK) {
+    switch (seq) {
+        case XCVSEQ_IDLE:
+            return NETOPT_STATE_IDLE;
+
         case XCVSEQ_RECEIVE:
             return NETOPT_STATE_RX;
 
@@ -499,23 +382,22 @@ netopt_state_t kw2xrf_get_status(kw2xrf_t *dev)
         case XCVSEQ_CONTINUOUS_CCA:
             return NETOPT_STATE_RX;
 
-        case XCVSEQ_IDLE:
-            return NETOPT_STATE_IDLE;
         default:
+            LOG_ERROR("[kw41zrf] XCVSEQ = %u is reserved!", (unsigned int) seq);
             break;
     }
     return NETOPT_STATE_IDLE;
 }
 
-int kw2xrf_cca(kw2xrf_t *dev)
+int kw41zrf_cca(kw41zrf_t *dev)
 {
     /* TODO: add Standalone CCA here */
-    kw2xrf_seq_timeout_on(dev, 0x3ffff);
-    kw2xrf_set_sequence(dev, XCVSEQ_CONTINUOUS_CCA);
+    kw41zrf_seq_timeout_on(dev, 0x3ffff);
+    kw41zrf_set_sequence(dev, XCVSEQ_CONTINUOUS_CCA);
     return 0;
 }
 
-void kw2xrf_set_rx_watermark(kw2xrf_t *dev, uint8_t value)
+void kw41zrf_set_rx_watermark(kw41zrf_t *dev, uint8_t value)
 {
-    kw2xrf_write_iregs(dev, MKW2XDMI_RX_WTR_MARK, &value, 1);
+    ZLL->RX_WTR_MARK = ZLL_RX_WTR_MARK_RX_WTR_MARK(value);
 }

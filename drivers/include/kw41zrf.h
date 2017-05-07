@@ -69,14 +69,14 @@ extern "C" {
 #define KW41ZRF_DEFAULT_TX_POWER         (IEEE802154_DEFAULT_TXPOWER)
 
 /**
- * @brief   Maximum output power of the kw2x device in dBm
+ * @brief   Maximum output power of the kw41z device in dBm
  */
-#define KW41ZRF_OUTPUT_POWER_MAX       (8)
+#define KW41ZRF_OUTPUT_POWER_MAX       (2)
 
 /**
- * @brief   Minimum output power of the kw2x device in dBm
+ * @brief   Minimum output power of the kw41z device in dBm
  */
-#define KW41ZRF_OUTPUT_POWER_MIN       (-35)
+#define KW41ZRF_OUTPUT_POWER_MIN       (-19)
 
 /**
  * @brief   Internal device option flags
@@ -104,12 +104,6 @@ extern "C" {
 /** @} */
 
 /**
- * @brief struct holding all params needed for device initialization
- */
-typedef struct kw41zrf_params {
-} kw41zrf_params_t;
-
-/**
  * @brief   Device descriptor for KW41ZRF radio devices
  *
  * @extends netdev_ieee802154_t
@@ -120,8 +114,6 @@ typedef struct {
      * @brief   device specific fields
      * @{
      */
-    //kw41zrf_params_t params;             /**< parameters for initialization */
-    uint8_t buf[KW41ZRF_MAX_PKT_LENGTH]; /**< Buffer for incoming or outgoing packets */
     uint8_t state;                      /**< current state of the radio */
     uint8_t tx_frame_len;               /**< length of the current TX frame */
     uint8_t idle_state;                 /**< state to return to after sending */
@@ -138,10 +130,11 @@ typedef struct {
  * @param[out] dev          device descriptor
  * @param[in]  params       parameters for device initialization
  */
-void kw41zrf_setup(kw41zrf_t *dev, const kw41zrf_params_t *params);
+void kw41zrf_setup(kw41zrf_t *dev);
 
 /**
  * @brief   Initialize the given KW41ZRF device
+ *
  * @param[out] dev          device descriptor
  * @param[in] cb            irq callback
  *

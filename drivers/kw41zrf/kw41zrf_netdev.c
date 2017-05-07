@@ -52,7 +52,7 @@ static void kw41zrf_irq_handler(void *arg)
     }
 }
 
-static int kw41zrf_init(netdev_t *netdev)
+static int kw41zrf_netdev_init(netdev_t *netdev)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
 
@@ -91,7 +91,7 @@ static void kw41zrf_tx_exec(kw41zrf_t *dev)
     }
 }
 
-static int _send(netdev_t *netdev, const struct iovec *vector, unsigned count)
+static int kw41zrf_netdev_send(netdev_t *netdev, const struct iovec *vector, unsigned count)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
     const struct iovec *ptr = vector;
@@ -141,7 +141,7 @@ static int _send(netdev_t *netdev, const struct iovec *vector, unsigned count)
     return (int)len;
 }
 
-static int _recv(netdev_t *netdev, void *buf, size_t len, void *info)
+static int kw41zrf_netdev_recv(netdev_t *netdev, void *buf, size_t len, void *info)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
     size_t pkt_len = 0;
@@ -176,7 +176,7 @@ static int _recv(netdev_t *netdev, void *buf, size_t len, void *info)
     return pkt_len - 2;
 }
 
-static int _set_state(kw41zrf_t *dev, netopt_state_t state)
+static int kw41zrf_netdev_set_state(kw41zrf_t *dev, netopt_state_t state)
 {
     switch (state) {
         case NETOPT_STATE_SLEEP:
@@ -203,12 +203,12 @@ static int _set_state(kw41zrf_t *dev, netopt_state_t state)
     return sizeof(netopt_state_t);
 }
 
-static netopt_state_t _get_state(kw41zrf_t *dev)
+static netopt_state_t kw41zrf_netdev_get_state(kw41zrf_t *dev)
 {
     return dev->state;
 }
 
-int _get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
+int kw41zrf_netdev_get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
 
@@ -326,7 +326,7 @@ int _get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
     return netdev_ieee802154_get((netdev_ieee802154_t *)netdev, opt, value, len);
 }
 
-static int _set(netdev_t *netdev, netopt_t opt, void *value, size_t len)
+static int kw41zrf_netdev_set(netdev_t *netdev, netopt_t opt, void *value, size_t len)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
     int res = -ENOTSUP;
@@ -755,12 +755,12 @@ static void _isr(netdev_t *netdev)
 }
 
 const netdev_driver_t kw41zrf_driver = {
-    .init = kw41zrf_init,
-    .send = kw41zrf_send,
-    .recv = kw41zrf_recv,
-    .get = kw41zrf_get,
-    .set = kw41zrf_set,
-    .isr = kw41zrf_isr,
+    .init = kw41zrf_netdev_init,
+    .send = kw41zrf_netdev_send,
+    .recv = kw41zrf_netdev_recv,
+    .get  = kw41zrf_netdev_get,
+    .set  = kw41zrf_netdev_set,
+    .isr  = kw41zrf_netdev_isr,
 };
 
 /** @} */

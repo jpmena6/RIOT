@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2017 SKF AB
  * Copyright (C) 2016 Phytec Messtechnik GmbH
  *
  * This file is subject to the terms and conditions of the GNU Lesser
@@ -7,19 +8,19 @@
  */
 
 /**
- * @ingroup     drivers_kw2xrf
+ * @ingroup     drivers_kw41zrf
  * @{
  *
  * @file
- * @brief       get/set interfaces for kw2xrf driver
+ * @brief       get/set interfaces for kw41zrf driver
  *
  * @author      Johann Fischer <j.fischer@phytec.de>
  */
 
-#ifndef KW2XRF_GETSET_H
-#define KW2XRF_GETSET_H
+#ifndef KW41ZRF_GETSET_H
+#define KW41ZRF_GETSET_H
 
-#include "kw2xrf.h"
+#include "kw41zrf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,130 +29,130 @@ extern "C" {
 /**
  * @brief   Set tx power of given device
  *
- * @param[in] dev        kw2xrf device descriptor
+ * @param[in] dev        kw41zrf device descriptor
  * @param[in] txpower    transmit power in dBm
  */
-void kw2xrf_set_tx_power(kw2xrf_t *dev, int16_t txpower);
+void kw41zrf_set_tx_power(kw41zrf_t *dev, int16_t txpower);
 
 /**
  * @brief   Get tx power value of given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  *
  * @return              current tx power value
  */
-uint16_t kw2xrf_get_txpower(kw2xrf_t *dev);
+uint16_t kw41zrf_get_txpower(kw41zrf_t *dev);
 
 /**
  * @brief   Set channel of given  device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] val       channel
  */
-int kw2xrf_set_channel(kw2xrf_t *dev, uint8_t val);
+int kw41zrf_set_channel(kw41zrf_t *dev, uint8_t val);
 
 /**
  * @brief   Get channel of given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  *
  * @return              current channel
  */
-uint8_t kw2xrf_get_channel(kw2xrf_t *dev);
+uint8_t kw41zrf_get_channel(kw41zrf_t *dev);
 
 /**
  * @brief   Abort current sequence of device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_abort_sequence(kw2xrf_t *dev);
+void kw41zrf_abort_sequence(kw41zrf_t *dev);
 
 /**
  * @brief   Set idle sequence state of device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_set_idle_sequence(kw2xrf_t *dev);
+void kw41zrf_set_idle_sequence(kw41zrf_t *dev);
 
 /**
  * @brief   Set sequence state of device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] seq       sequence
  */
-void kw2xrf_set_sequence(kw2xrf_t *dev, kw2xrf_physeq_t seq);
+void kw41zrf_set_sequence(kw41zrf_t *dev, uint8_t seq);
 
 /**
  * @brief   Set PAN ID of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] pan       PAN ID value
  */
-void kw2xrf_set_pan(kw2xrf_t *dev, uint16_t pan);
+void kw41zrf_set_pan(kw41zrf_t *dev, uint16_t pan);
 
 /**
  * @brief   Set short address of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] addr      short address
  */
-void kw2xrf_set_addr_short(kw2xrf_t *dev, uint16_t addr);
+void kw41zrf_set_addr_short(kw41zrf_t *dev, uint16_t addr);
 
 /**
  * @brief   Set long address of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] addr      long address
  */
-void kw2xrf_set_addr_long(kw2xrf_t *dev, uint64_t addr);
+void kw41zrf_set_addr_long(kw41zrf_t *dev, uint64_t addr);
 
 /**
  * @brief   Get short address of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @return              current short address
  */
-uint16_t kw2xrf_get_addr_short(kw2xrf_t *dev);
+uint16_t kw41zrf_get_addr_short(kw41zrf_t *dev);
 
 /**
  * @brief   Get long address of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @return              current long address
  */
-uint64_t kw2xrf_get_addr_long(kw2xrf_t *dev);
+uint64_t kw41zrf_get_addr_long(kw41zrf_t *dev);
 
 /**
  * @brief   Get CCA threshhold of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @return              current CCA threshhold
  */
-int8_t kw2xrf_get_cca_threshold(kw2xrf_t *dev);
+int8_t kw41zrf_get_cca_threshold(kw41zrf_t *dev);
 
 /**
  * @brief   Set CCA threshold of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] value     CCA threshold
  */
-void kw2xrf_set_cca_threshold(kw2xrf_t *dev, int8_t value);
+void kw41zrf_set_cca_threshold(kw41zrf_t *dev, int8_t value);
 
 /**
  * @brief   Set CCA mode of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] mode      CCA mode
  */
-void kw2xrf_set_cca_mode(kw2xrf_t *dev, uint8_t mode);
+void kw41zrf_set_cca_mode(kw41zrf_t *dev, uint8_t mode);
 
 /**
  * @brief   Get CCA mode of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @return              current CCA mode
  */
-uint8_t kw2xrf_get_cca_mode(kw2xrf_t *dev);
+uint8_t kw41zrf_get_cca_mode(kw41zrf_t *dev);
 
 /**
  * @brief   Get RSSI from LQI value
@@ -160,45 +161,45 @@ uint8_t kw2xrf_get_cca_mode(kw2xrf_t *dev);
  *
  * @return              deduced RSSI in dBm
  */
-uint32_t kw2xrf_get_rssi(uint32_t value);
+uint32_t kw41zrf_get_rssi(uint32_t value);
 
 /**
  * @brief   Get state of a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @return              current state
  */
-netopt_state_t kw2xrf_get_status(kw2xrf_t *dev);
+netopt_state_t kw41zrf_get_status(kw41zrf_t *dev);
 
 /**
  * @brief               Enable continous CCA
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  *
  * @return              CCA value
  */
-int kw2xrf_cca(kw2xrf_t *dev);
+int kw41zrf_cca(kw41zrf_t *dev);
 
 /**
  * @brief Set receive watermark
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] value     watermark
  */
-void kw2xrf_set_rx_watermark(kw2xrf_t *dev, uint8_t value);
+void kw41zrf_set_rx_watermark(kw41zrf_t *dev, uint8_t value);
 
 /**
  * @brief   Set netopt a given device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] option    Netopt option type
  * @param[in] state     state
  */
-void kw2xrf_set_option(kw2xrf_t *dev, uint16_t option, bool state);
+void kw41zrf_set_option(kw41zrf_t *dev, uint16_t option, bool state);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* KW2XRF_GETSET_H */
+#endif /* KW41ZRF_GETSET_H */
 /** @} */
