@@ -32,8 +32,7 @@
 #define _DBG_RAM_CAPTURE_H_
 /* clang-format on */
 
-#include "fsl_common.h"
-#include "fsl_device_registers.h"
+#include <stdint.h>
 
 /*!
  * @addtogroup xcvr
@@ -104,7 +103,7 @@ typedef enum _dbgRamStopTriggerType
  *
  * \return None.
  *
- * \details 
+ * \details
  * This routine assumes that some other functions in the calling routine both set
  * the channel and force RX warmup before calling ::dbg_ram_capture().
  ***********************************************************************************/
@@ -112,7 +111,7 @@ void dbg_ram_init(void);
 
 /*! *********************************************************************************
  * \brief  This function performs any state restoration at the completion of PKT RAM capture.
- * 
+ *
  * \details
  * Any clocks enabled to the packet RAM capture circuitry are disabled.
  ***********************************************************************************/
@@ -128,9 +127,9 @@ void dbg_ram_release(void);
  *
  * \return Status of the request.
  *
- * \details 
+ * \details
  * This function starts the process of capturing data to the packet RAM. Depending upon the start and stop trigger
- * settings, the actual capture process can take an indeterminate amount of time. Other APIs are provided to 
+ * settings, the actual capture process can take an indeterminate amount of time. Other APIs are provided to
  * perform a blocking wait for completion or allow polling for completion of the capture.
  * After any capture has completed, a separate routine must be called to postprocess the capture and copy all
  * data out of the packet RAM into a normal RAM buffer.
@@ -142,8 +141,8 @@ dbgRamStatus_t dbg_ram_start_capture(uint8_t dbg_page, dbgRamStartTriggerType st
  *
  * \return Status of the request, DBG_RAM_SUCCESS if capture is complete.
  *
- * \details 
- * This function performs a wait loop for capture completion and may take an indeterminate amount of time for 
+ * \details
+ * This function performs a wait loop for capture completion and may take an indeterminate amount of time for
  * some capture trigger types.
  ***********************************************************************************/
 dbgRamStatus_t dbg_ram_wait_for_complete(void); /* Blocking wait for capture completion, no matter what trigger type */
@@ -165,9 +164,9 @@ dbgRamStatus_t dbg_ram_poll_capture_status(void); /* Non-blocking completion che
  *
  * \return None.
  *
- * \details 
- * Data is copied from packet RAM in bytes to ensure no access problems. Data is unpacked from packet RAM 
- * (either sequentially captured or simultaneously captured) into a linear RAM buffer in system RAM. 
+ * \details
+ * Data is copied from packet RAM in bytes to ensure no access problems. Data is unpacked from packet RAM
+ * (either sequentially captured or simultaneously captured) into a linear RAM buffer in system RAM.
  * If a start trigger is enabled then the first buffer_sz_bytes that are captured are copied out.
  * If a stop trigger is enabled then the last buffer_sz_bytes that are captured are copied out.
  ***********************************************************************************/
@@ -183,12 +182,12 @@ dbgRamStatus_t dbg_ram_postproc_capture(uint8_t dbg_page, uint16_t buffer_sz_byt
  *
  * \return None.
  *
- * \details 
- * The capture to packet RAM always captures a full PKT_RAM worth of samples. The samples will be 
+ * \details
+ * The capture to packet RAM always captures a full PKT_RAM worth of samples. The samples will be
  * copied to the buffer pointed to by result_buffer parameter until buffer_sz_bytes worth of data have
- * been copied. Data will be copied 
+ * been copied. Data will be copied
  * NOTE: This routine has a slight hazard of getting stuck waiting for debug RAM to fill up when RX has
- * not been enabled or RX ends before the RAM fills up (such as when capturing packet data ). It is 
+ * not been enabled or RX ends before the RAM fills up (such as when capturing packet data ). It is
  * intended to be used with manually triggered RX where RX data will continue as long as needed.
  ***********************************************************************************/
 dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void * result_buffer);

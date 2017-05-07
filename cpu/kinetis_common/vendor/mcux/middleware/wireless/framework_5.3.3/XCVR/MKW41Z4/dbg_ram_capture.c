@@ -27,7 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "fsl_device_registers.h"
+#include "cpu.h"
 #include "fsl_xcvr.h"
 #include "dbg_ram_capture.h"
 
@@ -95,7 +95,7 @@ dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void 
                     while (!(XCVR_MISC->PACKET_RAM_CTRL & XCVR_CTRL_PACKET_RAM_CTRL_DBG_RAM_FULL(2)))
                     {
                         /* Waiting for PKT_RAM to fill, wait for PKT_RAM_1 full to ensure complete memory is filled. */
-                    }   
+                    }
                     /* Copy to output by bytes to avoid any access size problems in 16 bit packet RAM. */
                     output_ptr = result_buffer;
 #if !RADIO_IS_GEN_2P1
@@ -124,7 +124,7 @@ dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void 
                     while (!(XCVR_MISC->PACKET_RAM_CTRL & XCVR_CTRL_PACKET_RAM_CTRL_DBG_RAM_FULL(2)))
                     {
                         /* Waiting for PKT_RAM to fill, wait for PKT_RAM_1 full to ensure complete memory is filled. */
-                    }   
+                    }
                     /* Copy to output by bytes to avoid any access size problems in 16 bit packet RAM. */
                     output_ptr = result_buffer;
 #if !RADIO_IS_GEN_2P1
@@ -141,7 +141,7 @@ dbgRamStatus_t dbg_ram_capture(uint8_t dbg_page, uint16_t buffer_sz_bytes, void 
                     }
                     break;
                 case DBG_PAGE_IDLE:
-                default:    
+                default:
                     status = DBG_RAM_FAIL_PAGE_ERROR; /* Illegal capture page request. */
                     break;
             }

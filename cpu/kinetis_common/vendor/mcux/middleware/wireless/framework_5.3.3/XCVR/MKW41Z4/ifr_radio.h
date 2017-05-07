@@ -60,10 +60,10 @@
 #define IS_VALID_REG_ADDR(x)    (((x) & 0xFFFF0000U) == 0x41000000U) /* Valid addresses are 0x410xxxxx */
 #endif /* (defined(CPU_K32W042S1M2CAx_M0P) || defined(CPU_K32W042S1M2VPJ_M0P)) */
 /* KW41 and KW35/36 valid registers support */
-#if (defined(CPU_MKW41Z256VHT4) || defined(CPU_MKW41Z512VHT4) || \
-     defined(CPU_MKW31Z256VHT4) || defined(CPU_MKW31Z512VHT4) || \
-     defined(CPU_MKW21Z256VHT4) || defined(CPU_MKW21Z512VHT4) || \
-     defined(CPU_MKW35A512VFP4) || defined(CPU_MKW36A512VFP4) )
+#if (defined(CPU_MODEL_MKW41Z256VHT4) || defined(CPU_MODEL_MKW41Z512VHT4) || \
+     defined(CPU_MODEL_MKW31Z256VHT4) || defined(CPU_MODEL_MKW31Z512VHT4) || \
+     defined(CPU_MODEL_MKW21Z256VHT4) || defined(CPU_MODEL_MKW21Z512VHT4) || \
+     defined(CPU_MODEL_MKW35A512VFP4) || defined(CPU_MODEL_MKW36A512VFP4) )
 
 #define IS_VALID_REG_ADDR(x)    (((x) & 0xFFFF0000U) == 0x40050000U) /* Valid addresses are 0x4005xxxx */
 #endif
@@ -145,7 +145,7 @@ typedef struct
  * This function handles reading IFR data from flash memory for trim loading.
  *
  * @param read_addr the address in the IFR to be read.
- */ 
+ */
 uint32_t read_resource_ifr(uint32_t read_addr);
 
 /*!
@@ -154,7 +154,7 @@ uint32_t read_resource_ifr(uint32_t read_addr);
  * This function handles reading  data from a const table for testing the trim loading functions.
  *
  * @param read_addr the address in the IFR to be read.
- */ 
+ */
 uint32_t read_resource(uint16_t resource_id);
 
 /*!
@@ -164,7 +164,7 @@ uint32_t read_resource(uint16_t resource_id);
  *
  * @param sw_trim_tbl pointer to the table used to store software trim values.
  * @param num_entries the number of entries that can be stored in the SW trim table.
- */ 
+ */
 void handle_ifr(IFR_SW_TRIM_TBL_ENTRY_T * sw_trim_tbl, uint16_t num_entries);
 
 /*!
@@ -173,7 +173,7 @@ void handle_ifr(IFR_SW_TRIM_TBL_ENTRY_T * sw_trim_tbl, uint16_t num_entries);
  * This function handles reading die ID value for debug and testing usage.
  *
  * @return the value of the die ID field.
- */ 
+ */
 uint32_t handle_ifr_die_id(void);
 
 /*!
@@ -182,7 +182,7 @@ uint32_t handle_ifr_die_id(void);
  * This function handles reading KW chip version for debug and testing usage.
  *
  * @return the value of the KW version field.
- */ 
+ */
 uint32_t handle_ifr_die_kw_type(void);
 
 /*!
@@ -192,7 +192,7 @@ uint32_t handle_ifr_die_kw_type(void);
  *
  * @param dump_tbl pointer to the table used to store IFR entry values.
  * @param num_entries the number of entries that can be stored in the dump table.
- */ 
+ */
 void dump_ifr(uint32_t * dump_tbl, uint8_t num_entries);
 
 #endif /*__IFR_RADIO_H__ */

@@ -95,7 +95,7 @@ typedef unsigned char uchar_t;
 
 #if !defined(MAX)
 #define MAX(a,b)                    (((a) > (b))?(a):(b))
-#endif 
+#endif
 
 /* Compute the number of elements of an array */
 #define NumberOfElements(x) (sizeof(x)/sizeof((x)[0]))
@@ -109,40 +109,6 @@ typedef unsigned char uchar_t;
 /* Type definitions for link configuration of instantiable layers  */
 #define gInvalidInstanceId_c (instanceId_t)(-1)
 typedef uint32_t instanceId_t;
-
-/* Bit shift definitions */
-#define BIT0              0x01
-#define BIT1              0x02
-#define BIT2              0x04
-#define BIT3              0x08
-#define BIT4              0x10
-#define BIT5              0x20
-#define BIT6              0x40
-#define BIT7              0x80
-#define BIT8             0x100
-#define BIT9             0x200
-#define BIT10            0x400
-#define BIT11            0x800
-#define BIT12           0x1000
-#define BIT13           0x2000
-#define BIT14           0x4000
-#define BIT15           0x8000
-#define BIT16          0x10000
-#define BIT17          0x20000
-#define BIT18          0x40000
-#define BIT19          0x80000
-#define BIT20         0x100000
-#define BIT21         0x200000
-#define BIT22         0x400000
-#define BIT23         0x800000
-#define BIT24        0x1000000
-#define BIT25        0x2000000
-#define BIT26        0x4000000
-#define BIT27        0x8000000
-#define BIT28       0x10000000
-#define BIT29       0x20000000
-#define BIT30       0x40000000
-#define BIT31       0x80000000
 
 /* Shift definitions */
 #define SHIFT0      (0)

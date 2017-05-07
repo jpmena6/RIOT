@@ -32,7 +32,7 @@
 #define _FSL_XCVR_H_
 /* clang-format on */
 
-#include "fsl_device_registers.h"
+#include "cpu.h"
 #include "fsl_xcvr_trim.h"
 
 #if gMWS_UseCoexistence_d
@@ -61,7 +61,7 @@
 #define CLOCK_MAIN (EXT_CLK_32_MHZ) /* See ext_clock_config_t for this value */
 #endif /* RF_OSC_26MHZ == 1 */
 #endif /* CLOCK_MAIN */
- 
+
 #define TBD_ZERO                (0)
 #define FSL_XCVR_DRIVER_VERSION (MAKE_VERSION(0, 1, 0))
 
@@ -701,7 +701,7 @@ typedef struct _xcvr_mode_config
     uint32_t scgc5_clock_ena_bits;
 
     /* XCVR_MISC configs */
-    xcvr_masked_init_32_t xcvr_ctrl;  
+    xcvr_masked_init_32_t xcvr_ctrl;
 
     /* XCVR_PHY configs */
 #if RADIO_IS_GEN_3P0
@@ -721,7 +721,7 @@ typedef struct _xcvr_mode_config
     /* XCVR_RX_DIG configs */
     uint32_t rx_dig_ctrl_init_26mhz; /* NOTE: Common init, mode init, and datarate init will be OR'd together for RX_DIG_CTRL to form complete register initialization */
     uint32_t rx_dig_ctrl_init_32mhz; /* NOTE: Common init, mode init, and datarate init will be OR'd together for RX_DIG_CTRL to form complete register initialization */
-    uint32_t agc_ctrl_0_init; /* NOTE:  Common init and mode init will be OR'd together for AGC_CTRL_0 to form complete register initialization */ 
+    uint32_t agc_ctrl_0_init; /* NOTE:  Common init and mode init will be OR'd together for AGC_CTRL_0 to form complete register initialization */
 
     /* XCVR_TSM configs */
 #if (RADIO_IS_GEN_2P0 || RADIO_IS_GEN_2P1)
@@ -876,8 +876,8 @@ extern "C" {
 /*!
  * @brief  Initializes an XCVR instance.
  *
- * This function initializes the XCVR module according to the radio_mode and data_rate settings. This the only function call required to 
- * start up the XCVR in most situations. 
+ * This function initializes the XCVR module according to the radio_mode and data_rate settings. This the only function call required to
+ * start up the XCVR in most situations.
  *
  * @param radio_mode The radio mode for which the XCVR should be configured.
  * @param data_rate The data rate for which the XCVR should be configured. Only matters when GFSK/MSK radio_mode is selected.
@@ -896,8 +896,8 @@ void XCVR_Deinit(void);
 /*!
  * @brief  Initializes XCVR configure structure.
  *
- * This function updates pointers to the XCVR configure structures with default values. 
- * The configurations are divided into a common structure, a set of radio mode specific 
+ * This function updates pointers to the XCVR configure structures with default values.
+ * The configurations are divided into a common structure, a set of radio mode specific
  * structures (one per radio_mode), a set of mode&datarate specific structures (for each mode at
  * each datarate), and a set of data rate specific structures.
  * The pointers provided by this routine point to const structures which can be
@@ -912,11 +912,11 @@ void XCVR_Deinit(void);
  * @return 0 success, others failure
  * @see XCVR_Configure
  */
-xcvrStatus_t XCVR_GetDefaultConfig(radio_mode_t radio_mode, 
-                                   data_rate_t data_rate, 
-                                   const xcvr_common_config_t ** com_config, 
-                                   const xcvr_mode_config_t ** mode_config, 
-                                   const xcvr_mode_datarate_config_t ** mode_datarate_config, 
+xcvrStatus_t XCVR_GetDefaultConfig(radio_mode_t radio_mode,
+                                   data_rate_t data_rate,
+                                   const xcvr_common_config_t ** com_config,
+                                   const xcvr_mode_config_t ** mode_config,
+                                   const xcvr_mode_datarate_config_t ** mode_datarate_config,
                                    const xcvr_datarate_config_t ** datarate_config);
 
 /*!
@@ -933,11 +933,11 @@ xcvrStatus_t XCVR_GetDefaultConfig(radio_mode_t radio_mode,
  * @param first_init indicates whether the call is to initialize (== 1) or the call is to perform a mode change (== 0)
  * @return 0 succeed, others failed
  */
-xcvrStatus_t XCVR_Configure(const xcvr_common_config_t *com_config, 
-                            const xcvr_mode_config_t *mode_config, 
-                            const xcvr_mode_datarate_config_t *mode_datarate_config, 
-                            const xcvr_datarate_config_t *datarate_config, 
-                            int16_t tempDegC, 
+xcvrStatus_t XCVR_Configure(const xcvr_common_config_t *com_config,
+                            const xcvr_mode_config_t *mode_config,
+                            const xcvr_mode_datarate_config_t *mode_datarate_config,
+                            const xcvr_datarate_config_t *datarate_config,
+                            int16_t tempDegC,
                             XCVR_INIT_MODE_CHG_T first_init);
 
 /*!
@@ -1086,7 +1086,7 @@ xcvrStatus_t XCVR_SetXtalTrim(uint8_t xtalTrim);
  * The returned value is in the range 0..127 (7 bits).
  *
  * @return The XTAL trim compensation factors..
- */ 
+ */
 uint8_t  XCVR_GetXtalTrim(void);
 
 /*!
@@ -1106,7 +1106,7 @@ xcvrStatus_t XCVR_SetRssiAdjustment(int8_t adj);
  * The returned value is a signed 8-bit value, in 1/4 dBm step.
  *
  * @return The RSSI adjustment value..
- */ 
+ */
 int8_t  XCVR_GetRssiAdjustment(void);
 
 /*!
@@ -1117,7 +1117,7 @@ int8_t  XCVR_GetRssiAdjustment(void);
  * @param channel the channel number to set
  * @param useMappedChannel when true, channel is assumed to be from the protocol specific channel map. when false, channel is assumed to be from the 128 general channel list..
  * @return The status of the channel over-ride.
- */ 
+ */
 xcvrStatus_t XCVR_OverrideChannel(uint8_t channel, uint8_t useMappedChannel);
 
 /*!
@@ -1172,8 +1172,8 @@ void XCVR_ForceTxWd(void);
  * @param tx_pattern -  the data pattern to transmit on.
  * @return The status of the pattern reg transmit.
  * @note The XCVR_DftTxOff() function must be called to turn off TX and revert all settings. This routine calls XCVR_ChangeMode() with the desired radio mode
- *   and data rate. 
- */ 
+ *   and data rate.
+ */
 xcvrStatus_t XCVR_DftTxPatternReg(uint16_t channel_num, radio_mode_t radio_mode, data_rate_t data_rate, uint32_t tx_pattern);
 
 /*!
@@ -1187,8 +1187,8 @@ xcvrStatus_t XCVR_DftTxPatternReg(uint16_t channel_num, radio_mode_t radio_mode,
  * @param lfsr_length -  the length of the LFSR sequence to use.
  * @return The status of the LFSR reg transmit.
  * @note The XCVR_DftTxOff() function must be called to turn off TX and revert all settings. This routine calls XCVR_ChangeMode() with the desired radio mode
- *   and data rate. 
- */ 
+ *   and data rate.
+ */
 xcvrStatus_t XCVR_DftTxLfsrReg(uint16_t channel_num, radio_mode_t radio_mode, data_rate_t data_rate, uint8_t lfsr_length);
 
 /*!
@@ -1196,7 +1196,7 @@ xcvrStatus_t XCVR_DftTxLfsrReg(uint16_t channel_num, radio_mode_t radio_mode, da
  *
  * This function reverts all TX DFT settings from the test modes to normal operating mode.
  *
- */ 
+ */
 void XCVR_DftTxOff(void);
 
 /*!
@@ -1206,7 +1206,7 @@ void XCVR_DftTxOff(void);
  *
  * @param pa_power -  the power level to set. Valid values are 0, 1, and even values from 2 to 0x3E, inclusive.
  * @return The status of the PA power over-ride.
- */ 
+ */
 xcvrStatus_t XCVR_ForcePAPower(uint8_t pa_power);
 
 /*!
@@ -1217,7 +1217,7 @@ xcvrStatus_t XCVR_ForcePAPower(uint8_t pa_power);
  * @param rf_channel_freq -  the RF channel to transmit on. Valid values are integer values from 2360 to 2487MHz, inclusive.
  * @param protocol -  the protocol setting to use, valid settings are 6 (GFSK) and 7 (FSK).
  * @return The status of the CW transmit.
- */ 
+ */
 xcvrStatus_t XCVR_DftTxCW(uint16_t rf_channel_freq, uint8_t protocol);
 
 xcvrStatus_t XCVR_CoexistenceInit(void);

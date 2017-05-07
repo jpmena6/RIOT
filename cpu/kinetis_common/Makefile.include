@@ -1,5 +1,9 @@
 # include module specific includes
 export INCLUDES += -I$(RIOTCPU)/kinetis_common/include
+export INCLUDES += -I$(RIOTCPU)/kinetis_common/vendor/mcux/devices/MKW41Z4
+export INCLUDES += -I$(RIOTCPU)/kinetis_common/vendor/mcux/middleware/wireless/framework_5.3.3/Common
+export INCLUDES += -I$(RIOTCPU)/kinetis_common/vendor/mcux/middleware/wireless/framework_5.3.3/OSAbstraction/Interface
+export INCLUDES += -I$(RIOTCPU)/kinetis_common/vendor/mcux/devices/MKW41Z4/drivers
 
 # Add search path for linker scripts
 export LINKFLAGS += -L$(RIOTCPU)/kinetis_common/ldscripts
@@ -10,6 +14,8 @@ export UNDEF += $(BINDIR)/kinetis_common/fcfield.o
 # include kinetis common periph drivers
 export USEMODULE += kinetis_common_periph
 export USEMODULE += periph_common
+export USEMODULE += mcux_xcvr
+# export USEMODULE += mcux_drivers
 
 #include layered power mode module
 USEMODULE += pm_layered

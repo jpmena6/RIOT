@@ -31,7 +31,7 @@
 #define _FSL_XCVR_TRIM_H_
 /* Clang-format on. */
 
-#include "fsl_device_registers.h"
+#include <stdint.h>
 /*!
 * @addtogroup xcvr
 * @{
@@ -93,8 +93,8 @@ typedef enum /* Enumeration of ADC_GAIN_CAL 2 */
 /* \brief  Defines an entry in an array of structs to describe TZA DCOC STEP and TZA_DCOC_STEP_RECIPROCAL. */
 typedef struct
 {
-    uint16_t dcoc_step; 
-    uint16_t dcoc_step_rcp; 
+    uint16_t dcoc_step;
+    uint16_t dcoc_step_rcp;
 //    uint16_t dcoc_step_q;
 //    uint16_t dcoc_step_rcp_q;
 } TZAdcocstep_t;
@@ -116,9 +116,6 @@ void XcvrCalDelay(uint32_t time);
 void rx_dc_est_average(int16_t * i_avg, int16_t * q_avg, uint16_t SampleNumber);
 uint8_t rx_bba_dcoc_dac_trim_DCest(void);
 void DCOC_DAC_INIT_Cal(uint8_t standalone_operation);
-
-
-
 
 /* @} */
 
