@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 PHYTEC Messtechnik GmbH
+ * Copyright (C) 2017 SKF AB
  *
  * This file is subject to the terms and conditions of the GNU Lesser General
  * Public License v2.1. See the file LICENSE in the top level directory for more
@@ -7,15 +7,12 @@
  */
 
 /**
- * @ingroup     drivers_kw2xrf
+ * @ingroup     drivers_kw41zrf
  * @{
  * @file
- * @brief       Basic functionality of kw2xrf driver
+ * @brief       Basic functionality of kw41zrf driver
  *
- * @author      Johann Fischer <j.fischer@phytec.de>
- * @author      Jonas Remmert <j.remmert@phytec.de>
- * @author      Oliver Hahm <oliver.hahm@inria.fr>
- * @author      Sebastian Meiling <s@mlng.net>
+ * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  * @}
  */
 #include <stdint.h>
@@ -30,19 +27,19 @@
 #include "net/ieee802154.h"
 #include "luid.h"
 
-#include "kw2xrf.h"
-#include "kw2xrf_spi.h"
-#include "kw2xrf_reg.h"
-#include "kw2xrf_netdev.h"
-#include "kw2xrf_getset.h"
-#include "kw2xrf_intern.h"
+#include "kw41zrf.h"
+#include "kw41zrf_spi.h"
+#include "kw41zrf_reg.h"
+#include "kw41zrf_netdev.h"
+#include "kw41zrf_getset.h"
+#include "kw41zrf_intern.h"
 
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
-static void kw2xrf_set_address(kw2xrf_t *dev)
+static void kw41zrf_get_mac(kw41zrf_t *dev)
 {
-    DEBUG("[kw2xrf] set MAC addresses\n");
+    DEBUG("[kw41zrf] Get MAC address\n");
     eui64_t addr_long;
     /* get an 8-byte unique ID to use as hardware address */
     luid_get(addr_long.uint8, IEEE802154_LONG_ADDRESS_LEN);
@@ -50,45 +47,45 @@ static void kw2xrf_set_address(kw2xrf_t *dev)
     addr_long.uint8[0] &= ~(0x01);
     addr_long.uint8[0] |=  (0x02);
     /* set short and long address */
-    kw2xrf_set_addr_long(dev, ntohll(addr_long.uint64.u64));
-    kw2xrf_set_addr_short(dev, ntohs(addr_long.uint16[0].u16));
+    kw41zrf_set_addr_long(dev, ntohll(addr_long.uint64.u64));
+    kw41zrf_set_addr_short(dev, ntohs(addr_long.uint16[0].u16));
 }
 
-void kw2xrf_setup(kw2xrf_t *dev, const kw2xrf_params_t *params)
+void kw41zrf_setup(kw41zrf_t *dev, const kw41zrf_params_t *params)
 {
     netdev_t *netdev = (netdev_t *)dev;
 
-    netdev->driver = &kw2xrf_driver;
+    netdev->driver = &kw41zrf_driver;
     /* initialize device descriptor */
-    memcpy(&dev->params, params, sizeof(kw2xrf_params_t));
+    memcpy(&dev->params, params, sizeof(kw41zrf_params_t));
     dev->idle_state = XCVSEQ_RECEIVE;
     dev->state = 0;
     dev->pending_tx = 0;
-    kw2xrf_spi_init(dev);
-    kw2xrf_set_power_mode(dev, KW2XRF_IDLE);
-    DEBUG("[kw2xrf] setup finished\n");
+    kw41zrf_spi_init(dev);
+    kw41zrf_set_power_mode(dev, KW2XRF_IDLE);
+    DEBUG("[kw41zrf] setup finished\n");
 }
 
-int kw2xrf_init(kw2xrf_t *dev, gpio_cb_t cb)
+int kw41zrf_init(kw41zrf_t *dev, gpio_cb_t cb)
 {
     if (dev == NULL) {
         return -ENODEV;
     }
 
-    kw2xrf_set_out_clk(dev);
-    kw2xrf_disable_interrupts(dev);
+    kw41zrf_set_out_clk(dev);
+    kw41zrf_disable_interrupts(dev);
     /* set up GPIO-pin used for IRQ */
     gpio_init_int(dev->params.int_pin, GPIO_IN, GPIO_FALLING, cb, dev);
 
-    kw2xrf_abort_sequence(dev);
-    kw2xrf_update_overwrites(dev);
-    kw2xrf_timer_init(dev, KW2XRF_TIMEBASE_62500HZ);
-    DEBUG("[kw2xrf] init finished\n");
+    kw41zrf_abort_sequence(dev);
+    kw41zrf_update_overwrites(dev);
+    kw41zrf_timer_init(dev, KW2XRF_TIMEBASE_62500HZ);
+    DEBUG("[kw41zrf] init finished\n");
 
     return 0;
 }
 
-void kw2xrf_reset_phy(kw2xrf_t *dev)
+void kw41zrf_reset_phy(kw41zrf_t *dev)
 {
     /* reset options and sequence number */
     dev->netdev.seq = 0;
@@ -102,31 +99,31 @@ void kw2xrf_reset_phy(kw2xrf_t *dev)
 #endif
 
     dev->tx_power = KW2XRF_DEFAULT_TX_POWER;
-    kw2xrf_set_tx_power(dev, dev->tx_power);
+    kw41zrf_set_tx_power(dev, dev->tx_power);
 
-    kw2xrf_set_channel(dev, KW2XRF_DEFAULT_CHANNEL);
+    kw41zrf_set_channel(dev, KW2XRF_DEFAULT_CHANNEL);
 
-    kw2xrf_set_pan(dev, KW2XRF_DEFAULT_PANID);
-    kw2xrf_set_address(dev);
+    kw41zrf_set_pan(dev, KW2XRF_DEFAULT_PANID);
+    kw41zrf_set_address(dev);
 
-    kw2xrf_set_cca_mode(dev, 1);
+    kw41zrf_set_cca_mode(dev, 1);
 
-    kw2xrf_set_rx_watermark(dev, 1);
+    kw41zrf_set_rx_watermark(dev, 1);
 
-    kw2xrf_set_option(dev, KW2XRF_OPT_AUTOACK, true);
-    kw2xrf_set_option(dev, KW2XRF_OPT_ACK_REQ, true);
-    kw2xrf_set_option(dev, KW2XRF_OPT_AUTOCCA, true);
+    kw41zrf_set_option(dev, KW2XRF_OPT_AUTOACK, true);
+    kw41zrf_set_option(dev, KW2XRF_OPT_ACK_REQ, true);
+    kw41zrf_set_option(dev, KW2XRF_OPT_AUTOCCA, true);
 
-    kw2xrf_set_power_mode(dev, KW2XRF_AUTODOZE);
-    kw2xrf_set_sequence(dev, dev->idle_state);
+    kw41zrf_set_power_mode(dev, KW2XRF_AUTODOZE);
+    kw41zrf_set_sequence(dev, dev->idle_state);
 
-    kw2xrf_set_option(dev, KW2XRF_OPT_TELL_RX_START, true);
-    kw2xrf_set_option(dev, KW2XRF_OPT_TELL_RX_END, true);
-    kw2xrf_set_option(dev, KW2XRF_OPT_TELL_TX_END, true);
-    kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL2, MKW2XDM_PHY_CTRL2_SEQMSK);
+    kw41zrf_set_option(dev, KW2XRF_OPT_TELL_RX_START, true);
+    kw41zrf_set_option(dev, KW2XRF_OPT_TELL_RX_END, true);
+    kw41zrf_set_option(dev, KW2XRF_OPT_TELL_TX_END, true);
+    kw41zrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL2, MKW2XDM_PHY_CTRL2_SEQMSK);
 
-    kw2xrf_enable_irq_b(dev);
+    kw41zrf_enable_irq_b(dev);
 
-    DEBUG("[kw2xrf] init phy and (re)set to channel %d and pan %d.\n",
+    DEBUG("[kw41zrf] init phy and (re)set to channel %d and pan %d.\n",
           KW2XRF_DEFAULT_CHANNEL, KW2XRF_DEFAULT_PANID);
 }
