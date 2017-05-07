@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2017 SKF AB
  * Copyright (C) 2016 Phytec Messtechnik GmbH
  *
  * This file is subject to the terms and conditions of the GNU Lesser
@@ -37,34 +38,6 @@ typedef enum {
 } kw2xrf_powermode_t;
 
 /**
- * @brief   Set a certain bit of a kw2xrf register
- *
- * @param[in] dev       kw2xrf device descriptor
- * @param[in] reg       address of register
- * @param[in] bit       set this bit
- */
-inline void kw2xrf_set_dreg_bit(kw2xrf_t *dev, uint8_t reg, uint8_t bit)
-{
-    uint8_t tmp = kw2xrf_read_dreg(dev, reg);
-    tmp |= bit;
-    kw2xrf_write_dreg(dev, reg, tmp);
-}
-
-/**
- * @brief   Clear a certain bit of a kw2xrf register
- *
- * @param[in] dev       kw2xrf device descriptor
- * @param[in] reg       address of register
- * @param[in] bit       set this bit
- */
-inline void kw2xrf_clear_dreg_bit(kw2xrf_t *dev, uint8_t reg, uint8_t bit)
-{
-    uint8_t tmp = kw2xrf_read_dreg(dev, reg);
-    tmp &= ~bit;
-    kw2xrf_write_dreg(dev, reg, tmp);
-}
-
-/**
  * @brief   Enable any transceiver interrupt to assert IRQ_B
  *
  * @param[in] dev       kw2xrf device descriptor
@@ -96,13 +69,6 @@ void kw2xrf_disable_interrupts(kw2xrf_t *dev);
  *
  * @param[in] dev       kw2xrf device descriptor
  */
-void kw2xrf_update_overwrites(kw2xrf_t *dev);
-
-/**
- * @brief
- *
- * @param[in] dev       kw2xrf device descriptor
- */
 void kw2xrf_set_out_clk(kw2xrf_t *dev);
 
 /**
@@ -125,14 +91,14 @@ int kw2xrf_can_switch_to_idle(kw2xrf_t *dev);
 /**
  * @brief   Timebase values
  */
-typedef enum kw2xrf_timer_timebase {
-    KW2XRF_TIMEBASE_500000HZ = 2,
-    KW2XRF_TIMEBASE_250000HZ,
-    KW2XRF_TIMEBASE_125000HZ,
-    KW2XRF_TIMEBASE_62500HZ,
-    KW2XRF_TIMEBASE_31250HZ,
-    KW2XRF_TIMEBASE_15625HZ,
-} kw2xrf_timer_timebase_t;
+enum kw41zrf_timer_timebase {
+    KW41ZRF_TIMEBASE_500000HZ = 0b010,
+    KW41ZRF_TIMEBASE_250000HZ = 0b011,
+    KW41ZRF_TIMEBASE_125000HZ = 0b100,
+    KW41ZRF_TIMEBASE_62500HZ  = 0b101,
+    KW41ZRF_TIMEBASE_31250HZ  = 0b110,
+    KW41ZRF_TIMEBASE_15625HZ  = 0b111,
+};
 
 /**
  * @brief   Initialize the Event Timer Block (up counter)

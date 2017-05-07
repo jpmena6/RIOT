@@ -86,11 +86,9 @@ extern "C" {
  *
  * @{
  */
-#if 0
 #define KW41ZRF_OPT_SRC_ADDR_LONG    (NETDEV_IEEE802154_SRC_MODE_LONG)  /**< legacy define */
 #define KW41ZRF_OPT_RAWDUMP          (NETDEV_IEEE802154_RAW)            /**< legacy define */
 #define KW41ZRF_OPT_ACK_REQ          (NETDEV_IEEE802154_ACK_REQ)        /**< legacy define */
-#endif
 
 #define KW41ZRF_OPT_AUTOCCA        (0x0100) /**< CCA before TX active */
 #define KW41ZRF_OPT_PROMISCUOUS    (0x0200) /**< promiscuous mode active */

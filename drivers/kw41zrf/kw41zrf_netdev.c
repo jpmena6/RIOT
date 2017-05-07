@@ -27,12 +27,8 @@
 #include "net/netdev/ieee802154.h"
 
 #include "kw41zrf.h"
-#include "kw41zrf_spi.h"
-#include "kw41zrf_reg.h"
 #include "kw41zrf_netdev.h"
 #include "kw41zrf_getset.h"
-#include "kw41zrf_tm.h"
-#include "kw41zrf_intern.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -72,17 +68,22 @@ static int kw41zrf_netdev_init(netdev_t *netdev)
     return 0;
 }
 
-static size_t kw41zrf_tx_load(uint8_t *pkt_buf, uint8_t *buf, size_t len, size_t offset)
+static size_t kw41zrf_tx_load(const void *buf, size_t len, size_t offset)
 {
-    for (unsigned i = 0; i < len; i++) {
-        pkt_buf[i + offset] = buf[i];
+    if (offset >= sizeof(ZLL->PKT_BUFFER_TX)) {
+        return sizeof(ZLL->PKT_BUFFER_TX);
     }
+    if (len >= sizeof(ZLL->PKT_BUFFER_TX) - offset) {
+        len = sizeof(ZLL->PKT_BUFFER_TX) - offset;
+    }
+
+    memcpy((void *)&ZLL->PKT_BUFFER_TX[offset], buf, len);
     return offset + len;
 }
 
 static void kw41zrf_tx_exec(kw41zrf_t *dev)
 {
-    if ((dev->netdev.flags & kw41zrf_OPT_AUTOACK) &&
+    if ((dev->netdev.flags & KW41ZRF_OPT_AUTOACK) &&
         (_send_last_fcf & IEEE802154_FCF_ACK_REQ)) {
         kw41zrf_set_sequence(dev, XCVSEQ_TX_RX);
     }
@@ -95,18 +96,17 @@ static int kw41zrf_netdev_send(netdev_t *netdev, const struct iovec *vector, uns
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
     const struct iovec *ptr = vector;
-    uint8_t *pkt_buf = &(dev->buf[1]);
     size_t len = 0;
 
     /* load packet data into buffer */
     for (unsigned i = 0; i < count; i++, ptr++) {
         /* current packet data + FCS too long */
-        if ((len + ptr->iov_len + IEEE802154_FCS_LEN) > kw41zrf_MAX_PKT_LENGTH) {
+        if ((len + ptr->iov_len + IEEE802154_FCS_LEN) > KW41ZRF_MAX_PKT_LENGTH) {
             LOG_ERROR("[kw41zrf] packet too large (%u byte) to be send\n",
                   (unsigned)len + IEEE802154_FCS_LEN);
             return -EOVERFLOW;
         }
-        len = kw41zrf_tx_load(pkt_buf, ptr->iov_base, ptr->iov_len, len);
+        len = kw41zrf_tx_load(ptr->iov_base, ptr->iov_len, len);
     }
 
     /* make sure ongoing t or tr sequenz are finished */
@@ -180,14 +180,14 @@ static int kw41zrf_netdev_set_state(kw41zrf_t *dev, netopt_state_t state)
 {
     switch (state) {
         case NETOPT_STATE_SLEEP:
-            kw41zrf_set_power_mode(dev, kw41zrf_DOZE);
+            kw41zrf_set_power_mode(dev, KW41ZRF_DOZE);
             break;
         case NETOPT_STATE_IDLE:
-            kw41zrf_set_power_mode(dev, kw41zrf_AUTODOZE);
+            kw41zrf_set_power_mode(dev, KW41ZRF_AUTODOZE);
             kw41zrf_set_sequence(dev, dev->idle_state);
             break;
         case NETOPT_STATE_TX:
-            if (dev->netdev.flags & kw41zrf_OPT_PRELOADING) {
+            if (dev->netdev.flags & KW41ZRF_OPT_PRELOADING) {
                 kw41zrf_tx_exec(dev);
             }
             break;
@@ -196,7 +196,7 @@ static int kw41zrf_netdev_set_state(kw41zrf_t *dev, netopt_state_t state)
             break;
         case NETOPT_STATE_OFF:
             /* TODO: Replace with powerdown (set reset input low) */
-            kw41zrf_set_power_mode(dev, kw41zrf_HIBERNATE);
+            kw41zrf_set_power_mode(dev, KW41ZRF_HIBERNATE);
         default:
             return -ENOTSUP;
     }
@@ -222,7 +222,7 @@ int kw41zrf_netdev_get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
                 return -EOVERFLOW;
             }
 
-            *((uint16_t *)value) = kw41zrf_MAX_PKT_LENGTH - _MAX_MHR_OVERHEAD;
+            *((uint16_t *)value) = KW41ZRF_MAX_PKT_LENGTH - _MAX_MHR_OVERHEAD;
             return sizeof(uint16_t);
 
         case NETOPT_STATE:
@@ -233,7 +233,7 @@ int kw41zrf_netdev_get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
             return sizeof(netopt_state_t);
 
         case NETOPT_PRELOADING:
-            if (dev->netdev.flags & kw41zrf_OPT_PRELOADING) {
+            if (dev->netdev.flags & KW41ZRF_OPT_PRELOADING) {
                 *((netopt_enable_t *)value) = NETOPT_ENABLE;
             }
             else {
@@ -242,7 +242,7 @@ int kw41zrf_netdev_get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
             return sizeof(netopt_enable_t);
 
         case NETOPT_PROMISCUOUSMODE:
-            if (dev->netdev.flags & kw41zrf_OPT_PROMISCUOUS) {
+            if (dev->netdev.flags & KW41ZRF_OPT_PROMISCUOUS) {
                 *((netopt_enable_t *)value) = NETOPT_ENABLE;
             }
             else {
@@ -252,27 +252,27 @@ int kw41zrf_netdev_get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
 
         case NETOPT_RX_START_IRQ:
             *((netopt_enable_t *)value) =
-                !!(dev->netdev.flags & kw41zrf_OPT_TELL_RX_START);
+                !!(dev->netdev.flags & KW41ZRF_OPT_TELL_RX_START);
             return sizeof(netopt_enable_t);
 
         case NETOPT_RX_END_IRQ:
             *((netopt_enable_t *)value) =
-                !!(dev->netdev.flags & kw41zrf_OPT_TELL_RX_END);
+                !!(dev->netdev.flags & KW41ZRF_OPT_TELL_RX_END);
             return sizeof(netopt_enable_t);
 
         case NETOPT_TX_START_IRQ:
             *((netopt_enable_t *)value) =
-                !!(dev->netdev.flags & kw41zrf_OPT_TELL_TX_START);
+                !!(dev->netdev.flags & KW41ZRF_OPT_TELL_TX_START);
             return sizeof(netopt_enable_t);
 
         case NETOPT_TX_END_IRQ:
             *((netopt_enable_t *)value) =
-                !!(dev->netdev.flags & kw41zrf_OPT_TELL_TX_END);
+                !!(dev->netdev.flags & KW41ZRF_OPT_TELL_TX_END);
             return sizeof(netopt_enable_t);
 
         case NETOPT_AUTOCCA:
             *((netopt_enable_t *)value) =
-                !!(dev->netdev.flags & kw41zrf_OPT_AUTOCCA);
+                !!(dev->netdev.flags & KW41ZRF_OPT_AUTOCCA);
             return sizeof(netopt_enable_t);
 
         case NETOPT_TX_POWER:
@@ -407,53 +407,53 @@ static int kw41zrf_netdev_set(netdev_t *netdev, netopt_t opt, void *value, size_
 
         case NETOPT_AUTOACK:
             /* Set up HW generated automatic ACK after Receive */
-            kw41zrf_set_option(dev, kw41zrf_OPT_AUTOACK,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_AUTOACK,
                               ((bool *)value)[0]);
             break;
 
         case NETOPT_ACK_REQ:
-            kw41zrf_set_option(dev, kw41zrf_OPT_ACK_REQ,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_ACK_REQ,
                               ((bool *)value)[0]);
             break;
 
         case NETOPT_PRELOADING:
-            kw41zrf_set_option(dev, kw41zrf_OPT_PRELOADING,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_PRELOADING,
                               ((bool *)value)[0]);
             res = sizeof(netopt_enable_t);
             break;
 
         case NETOPT_PROMISCUOUSMODE:
-            kw41zrf_set_option(dev, kw41zrf_OPT_PROMISCUOUS,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_PROMISCUOUS,
                               ((bool *)value)[0]);
             res = sizeof(netopt_enable_t);
             break;
 
         case NETOPT_RX_START_IRQ:
-            kw41zrf_set_option(dev, kw41zrf_OPT_TELL_RX_START,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_TELL_RX_START,
                                  ((bool *)value)[0]);
             res = sizeof(netopt_enable_t);
             break;
 
         case NETOPT_RX_END_IRQ:
-            kw41zrf_set_option(dev, kw41zrf_OPT_TELL_RX_END,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_TELL_RX_END,
                                  ((bool *)value)[0]);
             res = sizeof(netopt_enable_t);
             break;
 
         case NETOPT_TX_START_IRQ:
-            kw41zrf_set_option(dev, kw41zrf_OPT_TELL_TX_START,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_TELL_TX_START,
                                  ((bool *)value)[0]);
             res = sizeof(netopt_enable_t);
             break;
 
         case NETOPT_TX_END_IRQ:
-            kw41zrf_set_option(dev, kw41zrf_OPT_TELL_TX_END,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_TELL_TX_END,
                                  ((bool *)value)[0]);
             res = sizeof(netopt_enable_t);
             break;
 
         case NETOPT_AUTOCCA:
-            kw41zrf_set_option(dev, kw41zrf_OPT_AUTOCCA,
+            kw41zrf_set_option(dev, KW41ZRF_OPT_AUTOCCA,
                                  ((bool *)value)[0]);
             res = sizeof(netopt_enable_t);
             break;

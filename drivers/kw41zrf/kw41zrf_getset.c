@@ -49,17 +49,6 @@ static const uint8_t pa_pwr_lt[22] = {
     24                 /* 2 dBm */
 };
 
-/** @brief Transceiver sequence identifiers */
-enum kw41zrf_xcvseq {
-    XCVSEQ_IDLE           = 0b000,
-    XCVSEQ_RECEIVE        = 0b001,
-    XCVSEQ_TRANSMIT       = 0b010,
-    XCVSEQ_CCA            = 0b011,
-    XCVSEQ_TX_RX          = 0b100,
-    XCVSEQ_CONTINUOUS_CCA = 0b101,
-    /* Other values are reserved */
-};
-
 void kw41zrf_set_tx_power(kw41zrf_t *dev, int16_t txpower_dbm)
 {
     if (txpower_dbm < KW41ZRF_OUTPUT_POWER_MIN) {
@@ -105,15 +94,25 @@ inline void kw41zrf_abort_sequence(kw41zrf_t *dev)
     ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ(XCVSEQ_IDLE);
 }
 
+static inline void kw41zrf_mask_irqs(void)
+{
+    bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TRCV_MSK_SHIFT);
+}
+
+static inline void kw41zrf_unmask_irqs(void)
+{
+    bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TRCV_MSK_SHIFT);
+}
+
 /*
  * Simplified version for irq handling where the state of
  * the sequence manager is known.
  */
 void kw41zrf_set_idle_sequence(kw41zrf_t *dev)
 {
-    kw41zrf_mask_irq_b(dev);
+    kw41zrf_mask_irqs();
     kw41zrf_set_sequence(dev, dev->idle_state);
-    kw41zrf_enable_irq_b(dev);
+    kw41zrf_unmask_irqs();
 }
 
 void kw41zrf_set_sequence(kw41zrf_t *dev, uint8_t seq)
@@ -151,7 +150,7 @@ void kw41zrf_set_pan(kw41zrf_t *dev, uint16_t pan)
     dev->netdev.pan = pan;
 
     ZLL->MACSHORTADDRS0 = (ZLL->MACSHORTADDRS0 & ~ZLL_MACSHORTADDRS0_MACPANID0_MASK) |
-        ZLL_MACSHORTADDRS0_MACPANID0(pan_id);
+        ZLL_MACSHORTADDRS0_MACPANID0(pan);
 
     LOG_DEBUG("[kw41zrf] set pan to: 0x%x\n", pan);
     dev->netdev.pan = pan;
@@ -392,7 +391,7 @@ netopt_state_t kw41zrf_get_status(kw41zrf_t *dev)
 int kw41zrf_cca(kw41zrf_t *dev)
 {
     /* TODO: add Standalone CCA here */
-    kw41zrf_seq_timeout_on(dev, 0x3ffff);
+//     kw41zrf_seq_timeout_on(dev, 0x3ffff);
     kw41zrf_set_sequence(dev, XCVSEQ_CONTINUOUS_CCA);
     return 0;
 }
