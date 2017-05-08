@@ -23,6 +23,7 @@
 #include "log.h"
 #include "cpu.h"
 #include "kw41zrf.h"
+#include "kw41zrf_intern.h"
 #include "kw41zrf_getset.h"
 
 #define ENABLE_DEBUG (0)
@@ -92,16 +93,6 @@ inline void kw41zrf_abort_sequence(kw41zrf_t *dev)
 {
     /* Writing IDLE to XCVSEQ aborts any ongoing sequence */
     ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ(XCVSEQ_IDLE);
-}
-
-static inline void kw41zrf_mask_irqs(void)
-{
-    bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TRCV_MSK_SHIFT);
-}
-
-static inline void kw41zrf_unmask_irqs(void)
-{
-    bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TRCV_MSK_SHIFT);
 }
 
 /*
@@ -224,28 +215,6 @@ uint8_t kw41zrf_get_cca_mode(kw41zrf_t *dev)
     return (ZLL->PHY_CTRL & ZLL_PHY_CTRL_CCATYPE_MASK) >> ZLL_PHY_CTRL_CCATYPE_SHIFT;
 }
 
-uint32_t kw41zrf_get_rssi(uint32_t value)
-{
-    /** TODO RSSI algorithm */
-    return value;
-#if 0
-    /* Get rssi (Received Signal Strength Indicator, unit is dBm)
-     * from lqi (Link Quality Indicator) value.
-     * There are two different equations for RSSI:
-     * RF = (LQI – 286.6) / 2.69333 (MKW2xD Reference Manual)
-     * RF = (LQI – 295.4) / 2.84 (MCR20A Reference Manual)
-     * The last appears more to match the graphic (Figure 3-10).
-     * Since RSSI value is always positive and we want to
-     * avoid the floating point computation:
-     * -RF * 65536 = (LQI / 2.84 - 295.4 / 2.84) * 65536
-     * RF * 65536 = (295.4 * 65536 / 2.84) - (LQI * 65536 / 2.84)
-     */
-    uint32_t a = (uint32_t)(295.4 * 65536 / 2.84);
-    uint32_t b = (uint32_t)(65536 / 2.84);
-    return (a - (b * value)) >> 16;
-#endif
-}
-
 void kw41zrf_set_option(kw41zrf_t *dev, uint16_t option, bool state)
 {
     DEBUG("[kw41zrf] set option %i to %i\n", option, state);
@@ -263,11 +232,9 @@ void kw41zrf_set_option(kw41zrf_t *dev, uint16_t option, bool state)
 
             case KW41ZRF_OPT_PROMISCUOUS:
                 LOG_DEBUG("[kw41zrf] enable: PROMISCUOUS\n");
-                /* disable auto ACKs in promiscuous mode */
-                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_AUTOACK_SHIFT);
-                bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXACKRQD_SHIFT);
                 /* enable promiscuous mode */
                 bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_PROMISCUOUS_SHIFT);
+                /* auto ACK is always disabled in promiscuous mode by the hardware */
                 break;
 
             case KW41ZRF_OPT_AUTOACK:
@@ -315,13 +282,6 @@ void kw41zrf_set_option(kw41zrf_t *dev, uint16_t option, bool state)
                 LOG_DEBUG("[kw41zrf] disable: PROMISCUOUS\n");
                 /* disable promiscuous mode */
                 bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_PROMISCUOUS_SHIFT);
-                /* re-enable AUTOACK only if the option is set */
-                if (dev->netdev.flags & KW41ZRF_OPT_AUTOACK) {
-                    bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_AUTOACK_SHIFT);
-                }
-                if (dev->netdev.flags & KW41ZRF_OPT_ACK_REQ) {
-                    bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_RXACKRQD_SHIFT);
-                }
                 break;
 
             case KW41ZRF_OPT_AUTOACK:

@@ -166,15 +166,6 @@ void kw41zrf_set_cca_mode(kw41zrf_t *dev, uint8_t mode);
 uint8_t kw41zrf_get_cca_mode(kw41zrf_t *dev);
 
 /**
- * @brief   Get RSSI from LQI value
- *
- * @param[in] value     Current LQI value
- *
- * @return              deduced RSSI in dBm
- */
-uint32_t kw41zrf_get_rssi(uint32_t value);
-
-/**
  * @brief   Get state of a given device
  *
  * @param[in] dev       kw41zrf device descriptor

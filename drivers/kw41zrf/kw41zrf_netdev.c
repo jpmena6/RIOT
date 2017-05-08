@@ -28,6 +28,7 @@
 
 #include "kw41zrf.h"
 #include "kw41zrf_netdev.h"
+#include "kw41zrf_intern.h"
 #include "kw41zrf_getset.h"
 
 #define ENABLE_DEBUG (0)
@@ -36,8 +37,6 @@
 #define _MAX_MHR_OVERHEAD           (25)
 
 #define _MACACKWAITDURATION         (864 / 16) /* 864us * 62500Hz */
-
-static uint8_t _send_last_fcf;
 
 static void kw41zrf_irq_handler(void *arg)
 {
@@ -68,23 +67,21 @@ static int kw41zrf_netdev_init(netdev_t *netdev)
     return 0;
 }
 
-static size_t kw41zrf_tx_load(const void *buf, size_t len, size_t offset)
+static inline size_t kw41zrf_tx_load(const void *buf, size_t len, size_t offset)
 {
-    if (offset >= sizeof(ZLL->PKT_BUFFER_TX)) {
-        return sizeof(ZLL->PKT_BUFFER_TX);
-    }
-    if (len >= sizeof(ZLL->PKT_BUFFER_TX) - offset) {
-        len = sizeof(ZLL->PKT_BUFFER_TX) - offset;
-    }
-
-    memcpy((void *)&ZLL->PKT_BUFFER_TX[offset], buf, len);
+    /* Array bounds are checked in the kw41zrf_netdev_send loop */
+    /* offset + 1 is used because buf[0] contains the frame length byte */
+    memcpy(((uint8_t *)&ZLL->PKT_BUFFER_TX[0]) + offset + 1, buf, len);
     return offset + len;
 }
 
 static void kw41zrf_tx_exec(kw41zrf_t *dev)
 {
+    /* Check FCF field in the TX buffer to see if the ACK_REQ flag was set in
+     * the packet that is queued for transmission */
+    uint8_t fcf = *(((volatile uint8_t *)&ZLL->PKT_BUFFER_TX[0]) + 1);
     if ((dev->netdev.flags & KW41ZRF_OPT_AUTOACK) &&
-        (_send_last_fcf & IEEE802154_FCF_ACK_REQ)) {
+        (fcf & IEEE802154_FCF_ACK_REQ)) {
         kw41zrf_set_sequence(dev, XCVSEQ_TX_RX);
     }
     else {
@@ -102,14 +99,14 @@ static int kw41zrf_netdev_send(netdev_t *netdev, const struct iovec *vector, uns
     for (unsigned i = 0; i < count; i++, ptr++) {
         /* current packet data + FCS too long */
         if ((len + ptr->iov_len + IEEE802154_FCS_LEN) > KW41ZRF_MAX_PKT_LENGTH) {
-            LOG_ERROR("[kw41zrf] packet too large (%u byte) to be send\n",
+            LOG_ERROR("[kw41zrf] packet too large (%u byte) to fit\n",
                   (unsigned)len + IEEE802154_FCS_LEN);
             return -EOVERFLOW;
         }
         len = kw41zrf_tx_load(ptr->iov_base, ptr->iov_len, len);
     }
 
-    /* make sure ongoing t or tr sequenz are finished */
+    /* make sure ongoing T or TR sequence are finished */
     if (kw41zrf_can_switch_to_idle(dev)) {
         kw41zrf_set_sequence(dev, XCVSEQ_IDLE);
         dev->pending_tx++;
@@ -120,21 +117,18 @@ static int kw41zrf_netdev_send(netdev_t *netdev, const struct iovec *vector, uns
     }
 
     /*
+     * First octet in the TX buffer contains the frame length.
      * Nbytes = FRAME_LEN - 2 -> FRAME_LEN = Nbytes + 2
-     * MKW2xD Reference Manual, P.192
+     * MKW41Z ref. man. 44.6.2.6.3.1.3 Sequence T (Transmit), p. 2147
      */
-    dev->buf[0] = len + IEEE802154_FCS_LEN;
+    *((volatile uint8_t *)&ZLL->PKT_BUFFER_TX[0]) = len + IEEE802154_FCS_LEN;
 
-    /* Help for decision to use T or TR sequenz */
-    _send_last_fcf = dev->buf[1];
-
-    kw41zrf_write_fifo(dev, dev->buf, dev->buf[0]);
 #ifdef MODULE_NETSTATS_L2
     netdev->stats.tx_bytes += len;
 #endif
 
-    /* send data out directly if pre-loading id disabled */
-    if (!(dev->netdev.flags & kw41zrf_OPT_PRELOADING)) {
+    /* send data out directly if pre-loading is disabled */
+    if (!(dev->netdev.flags & KW41ZRF_OPT_PRELOADING)) {
         kw41zrf_tx_exec(dev);
     }
 
@@ -143,20 +137,19 @@ static int kw41zrf_netdev_send(netdev_t *netdev, const struct iovec *vector, uns
 
 static int kw41zrf_netdev_recv(netdev_t *netdev, void *buf, size_t len, void *info)
 {
-    kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    size_t pkt_len = 0;
-
     /* get size of the received packet */
-    pkt_len = kw41zrf_read_dreg(dev, MKW2XDM_RX_FRM_LEN);
+    size_t pkt_len = (ZLL->IRQSTS & ZLL_IRQSTS_RX_FRAME_LENGTH_MASK) >> ZLL_IRQSTS_RX_FRAME_LENGTH_SHIFT;
 
     /* just return length when buf == NULL */
     if (buf == NULL) {
-        return pkt_len + 1;
+        return pkt_len;
     }
 
 #ifdef MODULE_NETSTATS_L2
     netdev->stats.rx_count++;
     netdev->stats.rx_bytes += pkt_len;
+#else
+    (void)netdev;
 #endif
 
     if (pkt_len > len) {
@@ -164,15 +157,16 @@ static int kw41zrf_netdev_recv(netdev_t *netdev, void *buf, size_t len, void *in
         return -ENOBUFS;
     }
 
-    kw41zrf_read_fifo(dev, (uint8_t *)buf, pkt_len + 1);
+    /* Copy the packet, skip the frame length byte */
+    memcpy((uint8_t *)buf, ((uint8_t*)&ZLL->PKT_BUFFER_RX[0]) + 1, pkt_len);
 
     if (info != NULL) {
         netdev_ieee802154_rx_info_t *radio_info = info;
-        radio_info->lqi = ((uint8_t*)buf)[pkt_len];
-        radio_info->rssi = (uint8_t)kw41zrf_get_rssi(radio_info->lqi);
+        radio_info->lqi = (ZLL->LQI_AND_RSSI & ZLL_LQI_AND_RSSI_LQI_VALUE_MASK) >> ZLL_LQI_AND_RSSI_LQI_VALUE_SHIFT;
+        radio_info->rssi = (ZLL->LQI_AND_RSSI & ZLL_LQI_AND_RSSI_RSSI_MASK) >> ZLL_LQI_AND_RSSI_RSSI_SHIFT;
     }
 
-    /* skip FCS and LQI */
+    /* skip PHR and FCS */
     return pkt_len - 2;
 }
 
@@ -180,10 +174,10 @@ static int kw41zrf_netdev_set_state(kw41zrf_t *dev, netopt_state_t state)
 {
     switch (state) {
         case NETOPT_STATE_SLEEP:
-            kw41zrf_set_power_mode(dev, KW41ZRF_DOZE);
+//             kw41zrf_set_power_mode(dev, KW41ZRF_DOZE);
             break;
         case NETOPT_STATE_IDLE:
-            kw41zrf_set_power_mode(dev, KW41ZRF_AUTODOZE);
+//             kw41zrf_set_power_mode(dev, KW41ZRF_AUTODOZE);
             kw41zrf_set_sequence(dev, dev->idle_state);
             break;
         case NETOPT_STATE_TX:
@@ -196,16 +190,11 @@ static int kw41zrf_netdev_set_state(kw41zrf_t *dev, netopt_state_t state)
             break;
         case NETOPT_STATE_OFF:
             /* TODO: Replace with powerdown (set reset input low) */
-            kw41zrf_set_power_mode(dev, KW41ZRF_HIBERNATE);
+//             kw41zrf_set_power_mode(dev, KW41ZRF_HIBERNATE);
         default:
             return -ENOTSUP;
     }
     return sizeof(netopt_state_t);
-}
-
-static netopt_state_t kw41zrf_netdev_get_state(kw41zrf_t *dev)
-{
-    return dev->state;
 }
 
 int kw41zrf_netdev_get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
@@ -229,7 +218,7 @@ int kw41zrf_netdev_get(netdev_t *netdev, netopt_t opt, void *value, size_t len)
             if (len < sizeof(netopt_state_t)) {
                 return -EOVERFLOW;
             }
-            *((netopt_state_t *)value) = _get_state(dev);
+            *((netopt_state_t *)value) = dev->state;
             return sizeof(netopt_state_t);
 
         case NETOPT_PRELOADING:
@@ -401,7 +390,7 @@ static int kw41zrf_netdev_set(netdev_t *netdev, netopt_t opt, void *value, size_
                 res = -EOVERFLOW;
             }
             else {
-                res = _set_state(dev, *((netopt_state_t *)value));
+                res = kw41zrf_netdev_set_state(dev, *((netopt_state_t *)value));
             }
             break;
 
@@ -490,7 +479,7 @@ static int kw41zrf_netdev_set(netdev_t *netdev, netopt_t opt, void *value, size_
             break;
 
         case NETOPT_RF_TESTMODE:
-#ifdef kw41zrf_TESTMODE
+#ifdef KW41ZRF_TESTMODE
             if (len < sizeof(uint8_t)) {
                 res = -EOVERFLOW;
             }
@@ -513,59 +502,63 @@ static int kw41zrf_netdev_set(netdev_t *netdev, netopt_t opt, void *value, size_
     return res;
 }
 
-static void _isr_event_seq_r(netdev_t *netdev, uint8_t *dregs)
+static void _isr_event_seq_r(netdev_t *netdev)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint8_t irqsts1 = 0;
+    uint32_t irqsts = ZLL->IRQSTS;
+    uint32_t handled_irqs = 0;
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_RXWTRMRKIRQ) {
-        DEBUG("[kw41zrf] got RXWTRMRKIRQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_RXWTRMRKIRQ;
+    if (irqsts & ZLL_IRQSTS_RXWTRMRKIRQ_MASK) {
+        DEBUG("[kw41zrf] RXWTRMRKIRQ (R)\n");
+        handled_irqs |= ZLL_IRQSTS_RXWTRMRKIRQ_MASK;
         netdev->event_callback(netdev, NETDEV_EVENT_RX_STARTED);
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_RXIRQ) {
+    if (irqsts & ZLL_IRQSTS_RXIRQ_MASK) {
         DEBUG("[kw41zrf] finished RXSEQ\n");
-        dev->state = NETOPT_STATE_RX;
-        irqsts1 |= MKW2XDM_IRQSTS1_RXIRQ;
+        handled_irqs |= ZLL_IRQSTS_RXIRQ_MASK;
         netdev->event_callback(netdev, NETDEV_EVENT_RX_COMPLETE);
-        if (dregs[MKW2XDM_PHY_CTRL1] & MKW2XDM_PHY_CTRL1_AUTOACK) {
+        if (ZLL->PHY_CTRL & ZLL_PHY_CTRL_AUTOACK_MASK) {
             DEBUG("[kw41zrf]: perform TX ACK\n");
         }
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_TXIRQ) {
+    if (irqsts & ZLL_IRQSTS_TXIRQ_MASK) {
         DEBUG("[kw41zrf] finished (ACK) TXSEQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_TXIRQ;
+        handled_irqs |= ZLL_IRQSTS_TXIRQ_MASK;
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_SEQIRQ) {
-        DEBUG("[kw41zrf] SEQIRQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_SEQIRQ;
+    if (irqsts & ZLL_IRQSTS_SEQIRQ_MASK) {
+        DEBUG("[kw41zrf] SEQIRQ (R)\n");
+        handled_irqs |= ZLL_IRQSTS_SEQIRQ_MASK;
         kw41zrf_set_idle_sequence(dev);
     }
-
-    kw41zrf_write_dreg(dev, MKW2XDM_IRQSTS1, irqsts1);
-    dregs[MKW2XDM_IRQSTS1] &= ~irqsts1;
+    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
+    /* write 1 to clear the IRQ flags */
+    ZLL->IRQSTS = (ZLL->IRQSTS & (
+        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
+        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
+        handled_irqs;
 }
 
-static void _isr_event_seq_t(netdev_t *netdev, uint8_t *dregs)
+static void _isr_event_seq_t(netdev_t *netdev)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint8_t irqsts1 = 0;
+    uint32_t irqsts = ZLL->IRQSTS;
+    uint32_t handled_irqs = 0;
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_TXIRQ) {
-        DEBUG("[kw41zrf] finished TXSEQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_TXIRQ;
+    if (irqsts & ZLL_IRQSTS_TXIRQ_MASK) {
+        DEBUG("[kw41zrf] finished TXSEQ (T)\n");
+        handled_irqs |= ZLL_IRQSTS_TXIRQ_MASK;
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_SEQIRQ) {
-        DEBUG("[kw41zrf] SEQIRQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_SEQIRQ;
+    if (irqsts & ZLL_IRQSTS_SEQIRQ_MASK) {
+        DEBUG("[kw41zrf] SEQIRQ (T)\n");
+        handled_irqs |= ZLL_IRQSTS_SEQIRQ_MASK;
 
-        if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_CCAIRQ) {
-            irqsts1 |= MKW2XDM_IRQSTS1_CCAIRQ;
-            if (dregs[MKW2XDM_IRQSTS2] & MKW2XDM_IRQSTS2_CCA) {
+        if (irqsts & ZLL_IRQSTS_CCAIRQ_MASK) {
+            handled_irqs |= ZLL_IRQSTS_CCAIRQ_MASK;
+            if (irqsts & ZLL_IRQSTS_CCA_MASK) {
                 DEBUG("[kw41zrf] CCA CH busy\n");
                 netdev->event_callback(netdev, NETDEV_EVENT_TX_MEDIUM_BUSY);
             }
@@ -579,79 +572,89 @@ static void _isr_event_seq_t(netdev_t *netdev, uint8_t *dregs)
         kw41zrf_set_idle_sequence(dev);
     }
 
-    kw41zrf_write_dreg(dev, MKW2XDM_IRQSTS1, irqsts1);
-    dregs[MKW2XDM_IRQSTS1] &= ~irqsts1;
+    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
+    /* write 1 to clear the IRQ flags */
+    ZLL->IRQSTS = (ZLL->IRQSTS & (
+        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
+        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
+        handled_irqs;
 }
 
 /* Standalone CCA */
-static void _isr_event_seq_cca(netdev_t *netdev, uint8_t *dregs)
+static void _isr_event_seq_cca(netdev_t *netdev)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint8_t irqsts1 = 0;
+    uint32_t irqsts = ZLL->IRQSTS;
+    uint32_t handled_irqs = 0;
 
-    if ((dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_CCAIRQ) &&
-        (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_SEQIRQ)) {
-        irqsts1 |= MKW2XDM_IRQSTS1_CCAIRQ | MKW2XDM_IRQSTS1_SEQIRQ;
-        if (dregs[MKW2XDM_IRQSTS2] & MKW2XDM_IRQSTS2_CCA) {
-            DEBUG("[kw41zrf] SEQIRQ, CCA CH busy\n");
+    if ((irqsts & ZLL_IRQSTS_SEQIRQ_MASK) &&
+        (irqsts & ZLL_IRQSTS_CCAIRQ_MASK)) {
+        handled_irqs |= ZLL_IRQSTS_CCAIRQ_MASK | ZLL_IRQSTS_SEQIRQ_MASK;
+        if (irqsts & ZLL_IRQSTS_CCA_MASK) {
+            DEBUG("[kw41zrf] SEQIRQ (CCA), CCA CH busy\n");
         }
         else {
-            DEBUG("[kw41zrf] SEQIRQ, CCA CH idle\n");
+            DEBUG("[kw41zrf] SEQIRQ (CCA), CCA CH idle\n");
         }
         kw41zrf_set_idle_sequence(dev);
     }
-    kw41zrf_write_dreg(dev, MKW2XDM_IRQSTS1, irqsts1);
-    dregs[MKW2XDM_IRQSTS1] &= ~irqsts1;
+    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
+    /* write 1 to clear the IRQ flags */
+    ZLL->IRQSTS = (ZLL->IRQSTS & (
+        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
+        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
+        handled_irqs;
 }
 
-static void _isr_event_seq_tr(netdev_t *netdev, uint8_t *dregs)
+static void _isr_event_seq_tr(netdev_t *netdev)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint8_t irqsts1 = 0;
+    uint32_t irqsts = ZLL->IRQSTS;
+    uint32_t handled_irqs = 0;
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_TXIRQ) {
-        DEBUG("[kw41zrf] finished TXSEQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_TXIRQ;
-        if (dregs[MKW2XDM_PHY_CTRL1] & MKW2XDM_PHY_CTRL1_RXACKRQD) {
+    if (irqsts & ZLL_IRQSTS_TXIRQ_MASK) {
+        DEBUG("[kw41zrf] finished TXSEQ (TR)\n");
+        handled_irqs |= ZLL_IRQSTS_TXIRQ_MASK;
+        if (ZLL->PHY_CTRL & ZLL_PHY_CTRL_RXACKRQD_MASK) {
             DEBUG("[kw41zrf] wait for RX ACK\n");
             kw41zrf_seq_timeout_on(dev, _MACACKWAITDURATION);
         }
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_RXWTRMRKIRQ) {
-        DEBUG("[kw41zrf] got RXWTRMRKIRQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_RXWTRMRKIRQ;
+    if (irqsts & ZLL_IRQSTS_RXWTRMRKIRQ_MASK) {
+        DEBUG("[kw41zrf] RXWTRMRKIRQ (TR)\n");
+        handled_irqs |= ZLL_IRQSTS_RXWTRMRKIRQ_MASK;
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_FILTERFAIL_IRQ) {
-        DEBUG("[kw41zrf] got FILTERFAILIRQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_FILTERFAIL_IRQ;
+    if (irqsts & ZLL_IRQSTS_FILTERFAIL_IRQ_MASK) {
+        DEBUG("[kw41zrf] FILTERFAILIRQ (TR)\n");
+        handled_irqs |= ZLL_IRQSTS_FILTERFAIL_IRQ_MASK;
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_RXIRQ) {
+    if (irqsts & ZLL_IRQSTS_RXIRQ_MASK) {
         DEBUG("[kw41zrf] got RX ACK\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_RXIRQ;
+        handled_irqs |= ZLL_IRQSTS_RXIRQ_MASK;
     }
 
-    if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_SEQIRQ) {
-        if (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_CCAIRQ) {
-            irqsts1 |= MKW2XDM_IRQSTS1_CCAIRQ;
-            if (dregs[MKW2XDM_IRQSTS2] & MKW2XDM_IRQSTS2_CCA) {
+    if (irqsts & ZLL_IRQSTS_SEQIRQ_MASK) {
+        DEBUG("[kw41zrf] SEQIRQ (TR)\n");
+        if (irqsts & ZLL_IRQSTS_CCAIRQ_MASK) {
+            handled_irqs |= ZLL_IRQSTS_CCAIRQ_MASK;
+            if (irqsts & ZLL_IRQSTS_CCA_MASK) {
                 DEBUG("[kw41zrf] CCA CH busy\n");
                 netdev->event_callback(netdev, NETDEV_EVENT_TX_MEDIUM_BUSY);
             }
         }
 
-        DEBUG("[kw41zrf] SEQIRQ\n");
-        irqsts1 |= MKW2XDM_IRQSTS1_SEQIRQ;
+        handled_irqs |= ZLL_IRQSTS_SEQIRQ_MASK;
         assert(dev->pending_tx != 0);
         dev->pending_tx--;
         netdev->event_callback(netdev, NETDEV_EVENT_TX_COMPLETE);
         kw41zrf_seq_timeout_off(dev);
         kw41zrf_set_idle_sequence(dev);
     }
-    else if (dregs[MKW2XDM_IRQSTS3] & MKW2XDM_IRQSTS3_TMR4IRQ) {
-        DEBUG("[kw41zrf] TC4TMOUT, no SEQIRQ, TX failed\n");
+    else if (irqsts & ZLL_IRQSTS_TMR3IRQ_MASK) {
+        DEBUG("[kw41zrf] RX timeout\n");
         assert(dev->pending_tx != 0);
         dev->pending_tx--;
         netdev->event_callback(netdev, NETDEV_EVENT_TX_NOACK);
@@ -659,99 +662,105 @@ static void _isr_event_seq_tr(netdev_t *netdev, uint8_t *dregs)
         kw41zrf_set_sequence(dev, dev->idle_state);
     }
 
-    kw41zrf_write_dreg(dev, MKW2XDM_IRQSTS1, irqsts1);
-    dregs[MKW2XDM_IRQSTS1] &= ~irqsts1;
+    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
+    /* write 1 to clear the IRQ flags */
+    ZLL->IRQSTS = (ZLL->IRQSTS & (
+        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
+        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
+        handled_irqs;
 }
 
-static void _isr_event_seq_ccca(netdev_t *netdev, uint8_t *dregs)
+static void _isr_event_seq_ccca(netdev_t *netdev)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint8_t irqsts1 = 0;
+    uint32_t irqsts = ZLL->IRQSTS;
+    uint32_t handled_irqs = 0;
 
-    if ((dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_CCAIRQ) &&
-        (dregs[MKW2XDM_IRQSTS1] & MKW2XDM_IRQSTS1_SEQIRQ)) {
-        irqsts1 |= MKW2XDM_IRQSTS1_CCAIRQ | MKW2XDM_IRQSTS1_SEQIRQ;
+    if ((irqsts & ZLL_IRQSTS_CCAIRQ_MASK) &&
+        (irqsts & ZLL_IRQSTS_SEQIRQ_MASK)) {
+        handled_irqs |= ZLL_IRQSTS_CCAIRQ_MASK | ZLL_IRQSTS_SEQIRQ_MASK;
         DEBUG("[kw41zrf] CCCA CH idle\n");
         kw41zrf_seq_timeout_off(dev);
         kw41zrf_set_sequence(dev, dev->idle_state);
     }
-    else if (dregs[MKW2XDM_IRQSTS3] & MKW2XDM_IRQSTS3_TMR4IRQ) {
-        irqsts1 |= MKW2XDM_IRQSTS1_CCAIRQ | MKW2XDM_IRQSTS1_SEQIRQ;
+    else if (irqsts & ZLL_IRQSTS_TMR3IRQ_MASK) {
+        handled_irqs |= ZLL_IRQSTS_CCAIRQ_MASK | ZLL_IRQSTS_SEQIRQ_MASK;
         DEBUG("[kw41zrf] CCCA timeout\n");
         kw41zrf_seq_timeout_off(dev);
         kw41zrf_set_sequence(dev, dev->idle_state);
     }
-    kw41zrf_write_dreg(dev, MKW2XDM_IRQSTS1, irqsts1);
-    dregs[MKW2XDM_IRQSTS1] &= ~irqsts1;
+
+    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
+    /* write 1 to clear the IRQ flags */
+    ZLL->IRQSTS = (ZLL->IRQSTS & (
+        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
+        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
+        handled_irqs;
 }
 
-static void _isr(netdev_t *netdev)
+static void kw41zrf_netdev_isr(netdev_t *netdev)
 {
-    uint8_t dregs[MKW2XDM_PHY_CTRL4 + 1];
-    kw41zrf_t *dev = (kw41zrf_t *)netdev;
+    kw41zrf_mask_irqs();
 
-    kw41zrf_read_dregs(dev, MKW2XDM_IRQSTS1, dregs, MKW2XDM_PHY_CTRL4 + 1);
-    kw41zrf_mask_irq_b(dev);
+    DEBUG("[kw41zrf] CTRL %08" PRIx32 ", IRQSTS %08" PRIx32 "\n",
+          ZLL->PHY_CTRL, ZLL->IRQSTS);
 
-    DEBUG("[kw41zrf] CTRL1 %0x, IRQSTS1 %0x, IRQSTS2 %0x\n",
-          dregs[MKW2XDM_PHY_CTRL1], dregs[MKW2XDM_IRQSTS1], dregs[MKW2XDM_IRQSTS2]);
-
-    switch (dregs[MKW2XDM_PHY_CTRL1] & MKW2XDM_PHY_CTRL1_XCVSEQ_MASK) {
+    switch ((ZLL->PHY_CTRL & ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ_SHIFT) {
         case XCVSEQ_RECEIVE:
-            _isr_event_seq_r(netdev, dregs);
+            _isr_event_seq_r(netdev);
             break;
 
         case XCVSEQ_TRANSMIT:
-            _isr_event_seq_t(netdev, dregs);
+            _isr_event_seq_t(netdev);
             break;
 
         case XCVSEQ_CCA:
-            _isr_event_seq_cca(netdev, dregs);
+            _isr_event_seq_cca(netdev);
             break;
 
         case XCVSEQ_TX_RX:
-            _isr_event_seq_tr(netdev, dregs);
+            _isr_event_seq_tr(netdev);
             break;
 
         case XCVSEQ_CONTINUOUS_CCA:
-            _isr_event_seq_ccca(netdev, dregs);
+            _isr_event_seq_ccca(netdev);
             break;
 
         case XCVSEQ_IDLE:
+            DEBUG("[kw41zrf] IRQ while IDLE\n");
+            break;
+
         default:
             DEBUG("[kw41zrf] undefined seq state in isr\n");
             break;
     }
 
-    uint8_t irqsts2 = 0;
-    if (dregs[MKW2XDM_IRQSTS2] & MKW2XDM_IRQSTS2_PB_ERR_IRQ) {
-        DEBUG("[kw41zrf] untreated PB_ERR_IRQ\n");
-        irqsts2 |= MKW2XDM_IRQSTS2_PB_ERR_IRQ;
+    uint32_t irqsts = ZLL->IRQSTS;
+    uint32_t handled_irqs = 0;
+    if (irqsts & ZLL_IRQSTS_PLL_UNLOCK_IRQ_MASK) {
+        DEBUG("[kw41zrf] untreated PLL_UNLOCK_IRQ\n");
+        handled_irqs |= ZLL_IRQSTS_PLL_UNLOCK_IRQ_MASK;
     }
-    if (dregs[MKW2XDM_IRQSTS2] & MKW2XDM_IRQSTS2_WAKE_IRQ) {
+    if (irqsts & ZLL_IRQSTS_WAKE_IRQ_MASK) {
         DEBUG("[kw41zrf] untreated WAKE_IRQ\n");
-        irqsts2 |= MKW2XDM_IRQSTS2_WAKE_IRQ;
+        handled_irqs |= ZLL_IRQSTS_WAKE_IRQ_MASK;
     }
-    kw41zrf_write_dreg(dev, MKW2XDM_IRQSTS2, irqsts2);
+    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
+    /* write 1 to clear the IRQ flags */
+    ZLL->IRQSTS = (ZLL->IRQSTS & (
+        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
+        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
+        handled_irqs;
 
     if (ENABLE_DEBUG) {
         /* for debugging only */
-        kw41zrf_read_dregs(dev, MKW2XDM_IRQSTS1, dregs, MKW2XDM_IRQSTS1 + 3);
-        if (dregs[MKW2XDM_IRQSTS1] & 0x7f) {
-            DEBUG("[kw41zrf] IRQSTS1 contains untreated IRQs: 0x%02x\n",
-                dregs[MKW2XDM_IRQSTS1]);
-        }
-        if (dregs[MKW2XDM_IRQSTS2] & 0x02) {
-            DEBUG("[kw41zrf] IRQSTS2 contains untreated IRQs: 0x%02x\n",
-                dregs[MKW2XDM_IRQSTS2]);
-        }
-        if (dregs[MKW2XDM_IRQSTS3] & 0x0f) {
-            DEBUG("[kw41zrf] IRQSTS3 contains untreated IRQs: 0x%02x\n",
-                dregs[MKW2XDM_IRQSTS3]);
+        if (ZLL->IRQSTS & 0x000f017f) {
+            DEBUG("[kw41zrf] IRQSTS contains untreated IRQs: 0x%08"PRIx32"\n",
+                  (ZLL->IRQSTS & 0x000f017f));
         }
     }
 
-    kw41zrf_enable_irq_b(dev);
+    kw41zrf_unmask_irqs();
 }
 
 const netdev_driver_t kw41zrf_driver = {

@@ -8,11 +8,11 @@
  */
 
 /**
- * @ingroup     drivers_kw2xrf
+ * @ingroup     drivers_kw41zrf
  * @{
  *
  * @file
- * @brief       Internal function interfaces for kw2xrf driver
+ * @brief       Internal function interfaces for kw41zrf driver
  *
  * @author      Johann Fischer <j.fischer@phytec.de>
  */
@@ -21,7 +21,7 @@
 #define KW2XRF_INTERN_H
 
 #include <stdint.h>
-#include "kw2xrf.h"
+#include "kw41zrf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,49 +35,61 @@ typedef enum {
     KW2XRF_DOZE,
     KW2XRF_IDLE,
     KW2XRF_AUTODOZE,
-} kw2xrf_powermode_t;
+} kw41zrf_powermode_t;
 
 /**
- * @brief   Enable any transceiver interrupt to assert IRQ_B
- *
- * @param[in] dev       kw2xrf device descriptor
+ * @brief   Timebase settings
  */
-inline void kw2xrf_enable_irq_b(kw2xrf_t *dev)
+typedef enum kw41zrf_timer_timebase {
+    KW41ZRF_TIMEBASE_500000HZ = 0b010,
+    KW41ZRF_TIMEBASE_250000HZ = 0b011,
+    KW41ZRF_TIMEBASE_125000HZ = 0b100,
+    KW41ZRF_TIMEBASE_62500HZ  = 0b101,
+    KW41ZRF_TIMEBASE_31250HZ  = 0b110,
+    KW41ZRF_TIMEBASE_15625HZ  = 0b111,
+} kw41zrf_timer_timebase_t;
+
+/**
+ * @brief   Mask all transceiver interrupts
+ *
+ * @param[in] dev       kw41zrf device descriptor
+ */
+static inline void kw41zrf_mask_irqs(void)
 {
-    kw2xrf_clear_dreg_bit(dev, MKW2XDM_PHY_CTRL4, MKW2XDM_PHY_CTRL4_TRCV_MSK);
+    bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TRCV_MSK_SHIFT);
 }
 
 /**
- * @brief   Mask all transceiver interrupts to assert IRQ_B
+ * @brief   Allow transceiver interrupts
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-inline void kw2xrf_mask_irq_b(kw2xrf_t *dev)
+static inline void kw41zrf_unmask_irqs(void)
 {
-    kw2xrf_set_dreg_bit(dev, MKW2XDM_PHY_CTRL4, MKW2XDM_PHY_CTRL4_TRCV_MSK);
+    bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TRCV_MSK_SHIFT);
 }
 
 /**
  * @brief   Disable all interrupts on transceiver
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_disable_interrupts(kw2xrf_t *dev);
+void kw41zrf_disable_interrupts(kw41zrf_t *dev);
 
 /**
  * @brief
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_set_out_clk(kw2xrf_t *dev);
+void kw41zrf_set_out_clk(kw41zrf_t *dev);
 
 /**
  * @brief   Set power mode for device
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] pm        power mode value
  */
-void kw2xrf_set_power_mode(kw2xrf_t *dev, kw2xrf_powermode_t pm);
+void kw41zrf_set_power_mode(kw41zrf_t *dev, kw41zrf_powermode_t pm);
 
 /**
  * @brief
@@ -86,19 +98,7 @@ void kw2xrf_set_power_mode(kw2xrf_t *dev, kw2xrf_powermode_t pm);
  *
  * @return
  */
-int kw2xrf_can_switch_to_idle(kw2xrf_t *dev);
-
-/**
- * @brief   Timebase values
- */
-enum kw41zrf_timer_timebase {
-    KW41ZRF_TIMEBASE_500000HZ = 0b010,
-    KW41ZRF_TIMEBASE_250000HZ = 0b011,
-    KW41ZRF_TIMEBASE_125000HZ = 0b100,
-    KW41ZRF_TIMEBASE_62500HZ  = 0b101,
-    KW41ZRF_TIMEBASE_31250HZ  = 0b110,
-    KW41ZRF_TIMEBASE_15625HZ  = 0b111,
-};
+int kw41zrf_can_switch_to_idle(kw41zrf_t *dev);
 
 /**
  * @brief   Initialize the Event Timer Block (up counter)
@@ -108,92 +108,92 @@ enum kw41zrf_timer_timebase {
  *   - Latches "timestamp" value during packet reception
  *   - Initiates timer-triggered sequences
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] tb        timer base value
  */
-void kw2xrf_timer_init(kw2xrf_t *dev, kw2xrf_timer_timebase_t tb);
+void kw41zrf_timer_init(kw41zrf_t *dev, kw41zrf_timer_timebase_t tb);
 
 /**
  * @brief   Enable start sequence time
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_timer2_seq_start_on(kw2xrf_t *dev);
+void kw41zrf_timer2_seq_start_on(kw41zrf_t *dev);
 
 /**
  * @brief   Disable start sequence timer
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_timer2_seq_start_off(kw2xrf_t *dev);
+void kw41zrf_timer2_seq_start_off(kw41zrf_t *dev);
 
 /**
  * @brief   Enable abort sequence timer
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_timer3_seq_abort_on(kw2xrf_t *dev);
+void kw41zrf_timer3_seq_abort_on(kw41zrf_t *dev);
 
 /**
  * @brief   Disable abort sequence timer
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_timer3_seq_abort_off(kw2xrf_t *dev);
+void kw41zrf_timer3_seq_abort_off(kw41zrf_t *dev);
 
 /**
  * @brief   Use T2CMP or T2PRIMECMP to Trigger Transceiver Operations
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] timeout   timeout value
  */
-void kw2xrf_trigger_tx_ops_enable(kw2xrf_t *dev, uint32_t timeout);
+void kw41zrf_trigger_tx_ops_enable(kw41zrf_t *dev, uint32_t timeout);
 
 /**
  * @brief   Disable Trigger for Transceiver Operations
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_trigger_tx_ops_disable(kw2xrf_t *dev);
+void kw41zrf_trigger_tx_ops_disable(kw41zrf_t *dev);
 
 /**
  * @brief   Use T3CMP to Abort an RX operation
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] timeout   timeout value
  */
-void kw2xrf_abort_rx_ops_enable(kw2xrf_t *dev, uint32_t timeout);
+void kw41zrf_abort_rx_ops_enable(kw41zrf_t *dev, uint32_t timeout);
 
 /**
  * @brief   Disable Trigger to Abort an RX operation
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_abort_rx_ops_disable(kw2xrf_t *dev);
+void kw41zrf_abort_rx_ops_disable(kw41zrf_t *dev);
 
 /**
  * @brief   Enable sequence timeout
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  * @param[in] timeout   timeout value
  */
-void kw2xrf_seq_timeout_on(kw2xrf_t *dev, uint32_t timeout);
+void kw41zrf_seq_timeout_on(kw41zrf_t *dev, uint32_t timeout);
 
 /**
  * @brief   Disable sequence timeout
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  */
-void kw2xrf_seq_timeout_off(kw2xrf_t *dev);
+void kw41zrf_seq_timeout_off(kw41zrf_t *dev);
 
 /**
  * @brief   Returns Timestamp of the actual received packet
  *
- * @param[in] dev       kw2xrf device descriptor
+ * @param[in] dev       kw41zrf device descriptor
  *
  * @return              timestamp value
  */
-uint32_t kw2xrf_get_timestamp(kw2xrf_t *dev);
+uint32_t kw41zrf_get_timestamp(kw41zrf_t *dev);
 
 #ifdef __cplusplus
 }
