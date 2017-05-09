@@ -70,6 +70,29 @@ static inline void kw41zrf_unmask_irqs(void)
 }
 
 /**
+ * @brief   Clear only the specified IRQ flags in the IRQSTS register
+ */
+static inline void kw41zrf_clear_irq_flags(uint32_t mask)
+{
+    /* Clear all handled IRQ flags, careful to avoid touching the timer masks */
+    /* write 1 to clear the IRQ flags */
+    ZLL->IRQSTS = (ZLL->IRQSTS & (
+        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
+        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
+        mask;
+}
+
+/**
+ * @brief   Set the callback function for the radio ISR
+ *
+ * This callback will be called from ISR context when a radio_1 interrupt occurs
+ *
+ * @param[in]  cb   Pointer to callback function
+ * @param[in]  arg  Argument that will be passed to the callback
+ */
+void kw41zrf_set_irq_callback(void (*cb)(void *arg), void *arg);
+
+/**
  * @brief   Disable all interrupts on transceiver
  *
  * @param[in] dev       kw41zrf device descriptor

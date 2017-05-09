@@ -533,12 +533,8 @@ static void _isr_event_seq_r(netdev_t *netdev)
         handled_irqs |= ZLL_IRQSTS_SEQIRQ_MASK;
         kw41zrf_set_idle_sequence(dev);
     }
-    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
-    /* write 1 to clear the IRQ flags */
-    ZLL->IRQSTS = (ZLL->IRQSTS & (
-        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
-        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
-        handled_irqs;
+
+    kw41zrf_clear_irq_flags(handled_irqs);
 }
 
 static void _isr_event_seq_t(netdev_t *netdev)
@@ -572,12 +568,7 @@ static void _isr_event_seq_t(netdev_t *netdev)
         kw41zrf_set_idle_sequence(dev);
     }
 
-    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
-    /* write 1 to clear the IRQ flags */
-    ZLL->IRQSTS = (ZLL->IRQSTS & (
-        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
-        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
-        handled_irqs;
+    kw41zrf_clear_irq_flags(handled_irqs);
 }
 
 /* Standalone CCA */
@@ -598,12 +589,8 @@ static void _isr_event_seq_cca(netdev_t *netdev)
         }
         kw41zrf_set_idle_sequence(dev);
     }
-    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
-    /* write 1 to clear the IRQ flags */
-    ZLL->IRQSTS = (ZLL->IRQSTS & (
-        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
-        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
-        handled_irqs;
+
+    kw41zrf_clear_irq_flags(handled_irqs);
 }
 
 static void _isr_event_seq_tr(netdev_t *netdev)
@@ -662,12 +649,7 @@ static void _isr_event_seq_tr(netdev_t *netdev)
         kw41zrf_set_sequence(dev, dev->idle_state);
     }
 
-    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
-    /* write 1 to clear the IRQ flags */
-    ZLL->IRQSTS = (ZLL->IRQSTS & (
-        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
-        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
-        handled_irqs;
+    kw41zrf_clear_irq_flags(handled_irqs);
 }
 
 static void _isr_event_seq_ccca(netdev_t *netdev)
@@ -690,12 +672,7 @@ static void _isr_event_seq_ccca(netdev_t *netdev)
         kw41zrf_set_sequence(dev, dev->idle_state);
     }
 
-    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
-    /* write 1 to clear the IRQ flags */
-    ZLL->IRQSTS = (ZLL->IRQSTS & (
-        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
-        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
-        handled_irqs;
+    kw41zrf_clear_irq_flags(handled_irqs);
 }
 
 static void kw41zrf_netdev_isr(netdev_t *netdev)
@@ -745,12 +722,7 @@ static void kw41zrf_netdev_isr(netdev_t *netdev)
         DEBUG("[kw41zrf] untreated WAKE_IRQ\n");
         handled_irqs |= ZLL_IRQSTS_WAKE_IRQ_MASK;
     }
-    /* Clear all handled IRQ flags, careful to avoid clearing the timer masks */
-    /* write 1 to clear the IRQ flags */
-    ZLL->IRQSTS = (ZLL->IRQSTS & (
-        ZLL_IRQSTS_TMR1MSK_MASK | ZLL_IRQSTS_TMR2MSK_MASK |
-        ZLL_IRQSTS_TMR3MSK_MASK | ZLL_IRQSTS_TMR4MSK_MASK)) |
-        handled_irqs;
+    kw41zrf_clear_irq_flags(handled_irqs);
 
     if (ENABLE_DEBUG) {
         /* for debugging only */

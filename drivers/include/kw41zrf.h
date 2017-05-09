@@ -107,18 +107,20 @@ extern "C" {
  * @extends netdev_ieee802154_t
  */
 typedef struct {
-    netdev_ieee802154_t netdev;         /**< netdev parent struct */
+    netdev_ieee802154_t netdev; /**< netdev parent struct */
     /**
      * @brief   device specific fields
      * @{
      */
-    uint8_t state;                      /**< current state of the radio */
-    uint8_t tx_frame_len;               /**< length of the current TX frame */
-    uint8_t idle_state;                 /**< state to return to after sending */
-    uint8_t pending_tx;                 /**< keep track of pending TX calls
-                                             this is required to know when to
-                                             return to @ref kw41zrf_t::idle_state */
-    int16_t tx_power;                   /**< The current tx-power setting of the device */
+    uint8_t state;              /**< current state of the radio */
+    uint8_t tx_frame_len;       /**< length of the current TX frame */
+    uint8_t idle_state;         /**< state to return to after sending */
+    uint8_t pending_tx;         /**< keep track of pending TX calls this is
+                                     required to know when to return to
+                                     @ref kw41zrf_t::idle_state */
+    int16_t tx_power;           /**< The current tx-power setting of the device */
+    uint32_t tx_warmup_time;    /**< TX warmup time, in event timer ticks */
+    uint32_t rx_warmup_time;    /**< RX warmup time, in event timer ticks */
     /** @} */
 } kw41zrf_t;
 

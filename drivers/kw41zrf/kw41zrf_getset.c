@@ -351,7 +351,7 @@ netopt_state_t kw41zrf_get_status(kw41zrf_t *dev)
 int kw41zrf_cca(kw41zrf_t *dev)
 {
     /* TODO: add Standalone CCA here */
-//     kw41zrf_seq_timeout_on(dev, 0x3ffff);
+    kw41zrf_seq_timeout_on(dev, 0x3ffff);
     kw41zrf_set_sequence(dev, XCVSEQ_CONTINUOUS_CCA);
     return 0;
 }

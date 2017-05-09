@@ -89,11 +89,8 @@ int kw41zrf_init(kw41zrf_t *dev, gpio_cb_t cb)
         return -EIO;
     }
 
-    /* Reset most settings */
+    /* Software reset of most settings */
     kw41zrf_reset_phy(dev);
-
-    kw41z_tmr2_disable();
-    kw41z_tmr1_disable();
 
     /* Compute warmup times (scaled to 16us) */
     dev->rx_warmup_time =
@@ -108,11 +105,12 @@ int kw41zrf_init(kw41zrf_t *dev, gpio_cb_t cb)
     dev->tx_warmup_time = (dev->tx_warmup_time + 15) / 16;
 
     /* Configre Radio IRQ */
+    kw41zrf_set_irq_callback(cb, dev);
     NVIC_ClearPendingIRQ(Radio_1_IRQn);
-    IRQ_CONNECT(Radio_1_IRQn, RADIO_0_IRQ_PRIO, kw41z_isr, 0, 0);
+    NVIC_EnableIRQ(Radio_1_IRQn);
 
     kw41zrf_abort_sequence(dev);
-    kw41zrf_unmask_irqs(dev);
+    kw41zrf_unmask_irqs();
 
     DEBUG("[kw41zrf] init finished\n");
 
@@ -135,6 +133,7 @@ void kw41zrf_reset_phy(kw41zrf_t *dev)
     /* Reset PHY_CTRL to the default value of mask all interrupts and all other
      * settings disabled */
     ZLL->PHY_CTRL =
+        ZLL_PHY_CTRL_CCATYPE(1) |
         ZLL_PHY_CTRL_TSM_MSK_MASK |
         ZLL_PHY_CTRL_WAKE_MSK_MASK |
         ZLL_PHY_CTRL_CRC_MSK_MASK |
@@ -158,10 +157,8 @@ void kw41zrf_reset_phy(kw41zrf_t *dev)
         ZLL_RX_FRAME_FILTER_DATA_FT_MASK;
 
     /* Set prescaler to obtain 1 symbol (16us) timebase */
-    kw41zrf_timer_init(dev, KW2XRF_TIMEBASE_62500HZ);
+    kw41zrf_timer_init(dev, KW41ZRF_TIMEBASE_62500HZ);
 
-    /* TODO configurable CCA threshold */
-    /* Below magic values copied from Zephyr implementation of kw41z link layer driver */
     /* Set CCA threshold to -75 dBm */
     ZLL->CCA_LQI_CTRL = (ZLL->CCA_LQI_CTRL & ~ZLL_CCA_LQI_CTRL_CCA1_THRESH_MASK) |
         ZLL_CCA_LQI_CTRL_CCA1_THRESH(0xB5);
@@ -186,17 +183,17 @@ void kw41zrf_reset_phy(kw41zrf_t *dev)
 
     kw41zrf_set_rx_watermark(dev, 1);
 
-    kw41zrf_set_option(dev, KW2XRF_OPT_AUTOACK, true);
-    kw41zrf_set_option(dev, KW2XRF_OPT_ACK_REQ, true);
-    kw41zrf_set_option(dev, KW2XRF_OPT_AUTOCCA, true);
+    kw41zrf_set_option(dev, KW41ZRF_OPT_AUTOACK, true);
+    kw41zrf_set_option(dev, KW41ZRF_OPT_ACK_REQ, true);
+    kw41zrf_set_option(dev, KW41ZRF_OPT_AUTOCCA, true);
 
-    kw41zrf_set_power_mode(dev, KW41ZRF_AUTODOZE);
+//     kw41zrf_set_power_mode(dev, KW41ZRF_AUTODOZE);
     kw41zrf_set_sequence(dev, dev->idle_state);
 
     kw41zrf_set_option(dev, KW41ZRF_OPT_TELL_RX_START, true);
     kw41zrf_set_option(dev, KW41ZRF_OPT_TELL_RX_END, true);
     kw41zrf_set_option(dev, KW41ZRF_OPT_TELL_TX_END, true);
-    bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_SEQMSK_MASK);
+    bit_clear32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_SEQMSK_SHIFT);
 
     DEBUG("[kw41zrf] reset PHY and (re)set to channel %d and pan %d.\n",
           KW41ZRF_DEFAULT_CHANNEL, KW41ZRF_DEFAULT_PANID);
