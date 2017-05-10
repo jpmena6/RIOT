@@ -87,17 +87,6 @@ inline void kw41zrf_abort_sequence(kw41zrf_t *dev)
     ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ(XCVSEQ_IDLE);
 }
 
-/*
- * Simplified version for irq handling where the state of
- * the sequence manager is known.
- */
-void kw41zrf_set_idle_sequence(kw41zrf_t *dev)
-{
-    kw41zrf_mask_irqs();
-    kw41zrf_set_sequence(dev, dev->idle_state);
-    kw41zrf_unmask_irqs();
-}
-
 void kw41zrf_set_sequence(kw41zrf_t *dev, uint8_t seq)
 {
     kw41zrf_abort_sequence(dev);

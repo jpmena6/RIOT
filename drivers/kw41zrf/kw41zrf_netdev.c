@@ -522,10 +522,9 @@ static int kw41zrf_netdev_set(netdev_t *netdev, netopt_t opt, void *value, size_
     return res;
 }
 
-static void _isr_event_seq_r(netdev_t *netdev)
+static uint32_t _isr_event_seq_r(netdev_t *netdev, uint32_t irqsts)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint32_t irqsts = ZLL->IRQSTS;
     uint32_t handled_irqs = 0;
 
     if (irqsts & ZLL_IRQSTS_RXWTRMRKIRQ_MASK) {
@@ -551,16 +550,15 @@ static void _isr_event_seq_r(netdev_t *netdev)
     if (irqsts & ZLL_IRQSTS_SEQIRQ_MASK) {
         DEBUG("[kw41zrf] SEQIRQ (R)\n");
         handled_irqs |= ZLL_IRQSTS_SEQIRQ_MASK;
-        kw41zrf_set_idle_sequence(dev);
+        kw41zrf_set_sequence(dev, dev->idle_state);
     }
 
-    kw41zrf_clear_irq_flags(handled_irqs);
+    return handled_irqs;
 }
 
-static void _isr_event_seq_t(netdev_t *netdev)
+static uint32_t _isr_event_seq_t(netdev_t *netdev, uint32_t irqsts)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint32_t irqsts = ZLL->IRQSTS;
     uint32_t handled_irqs = 0;
 
     if (irqsts & ZLL_IRQSTS_TXIRQ_MASK) {
@@ -587,17 +585,16 @@ static void _isr_event_seq_t(netdev_t *netdev)
 
         assert(dev->pending_tx != 0);
         dev->pending_tx--;
-        kw41zrf_set_idle_sequence(dev);
+        kw41zrf_set_sequence(dev, dev->idle_state);
     }
 
-    kw41zrf_clear_irq_flags(handled_irqs);
+    return handled_irqs;
 }
 
 /* Standalone CCA */
-static void _isr_event_seq_cca(netdev_t *netdev)
+static uint32_t _isr_event_seq_cca(netdev_t *netdev, uint32_t irqsts)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint32_t irqsts = ZLL->IRQSTS;
     uint32_t handled_irqs = 0;
 
     if ((irqsts & ZLL_IRQSTS_SEQIRQ_MASK) &&
@@ -609,16 +606,15 @@ static void _isr_event_seq_cca(netdev_t *netdev)
         else {
             DEBUG("[kw41zrf] SEQIRQ (CCA), CCA CH idle\n");
         }
-        kw41zrf_set_idle_sequence(dev);
+        kw41zrf_set_sequence(dev, dev->idle_state);
     }
 
-    kw41zrf_clear_irq_flags(handled_irqs);
+    return handled_irqs;
 }
 
-static void _isr_event_seq_tr(netdev_t *netdev)
+static uint32_t _isr_event_seq_tr(netdev_t *netdev, uint32_t irqsts)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint32_t irqsts = ZLL->IRQSTS;
     uint32_t handled_irqs = 0;
 
     if (irqsts & ZLL_IRQSTS_TXIRQ_MASK) {
@@ -636,7 +632,7 @@ static void _isr_event_seq_tr(netdev_t *netdev)
     }
 
     if (irqsts & ZLL_IRQSTS_FILTERFAIL_IRQ_MASK) {
-        DEBUG("[kw41zrf] FILTERFAILIRQ (TR)\n");
+        DEBUG("[kw41zrf] FILTERFAILIRQ (TR): %04"PRIx32"\n", ZLL->FILTERFAIL_CODE);
         handled_irqs |= ZLL_IRQSTS_FILTERFAIL_IRQ_MASK;
     }
 
@@ -644,7 +640,6 @@ static void _isr_event_seq_tr(netdev_t *netdev)
         DEBUG("[kw41zrf] got RX ACK\n");
         handled_irqs |= ZLL_IRQSTS_RXIRQ_MASK;
     }
-    kw41zrf_clear_irq_flags(handled_irqs);
 
     if (irqsts & ZLL_IRQSTS_SEQIRQ_MASK) {
         DEBUG("[kw41zrf] SEQIRQ (TR)\n");
@@ -661,8 +656,7 @@ static void _isr_event_seq_tr(netdev_t *netdev)
         dev->pending_tx--;
         netdev->event_callback(netdev, NETDEV_EVENT_TX_COMPLETE);
         kw41zrf_seq_timeout_off(dev);
-        kw41zrf_clear_irq_flags(handled_irqs);
-        kw41zrf_set_idle_sequence(dev);
+        kw41zrf_set_sequence(dev, dev->idle_state);
     }
     else if (irqsts & ZLL_IRQSTS_TMR4IRQ_MASK) {
         DEBUG("[kw41zrf] RXACK timeout\n");
@@ -671,16 +665,14 @@ static void _isr_event_seq_tr(netdev_t *netdev)
         dev->pending_tx--;
         netdev->event_callback(netdev, NETDEV_EVENT_TX_NOACK);
         kw41zrf_seq_timeout_off(dev);
-        kw41zrf_clear_irq_flags(handled_irqs);
         kw41zrf_set_sequence(dev, dev->idle_state);
     }
-
+    return handled_irqs;
 }
 
-static void _isr_event_seq_ccca(netdev_t *netdev)
+static uint32_t _isr_event_seq_ccca(netdev_t *netdev, uint32_t irqsts)
 {
     kw41zrf_t *dev = (kw41zrf_t *)netdev;
-    uint32_t irqsts = ZLL->IRQSTS;
     uint32_t handled_irqs = 0;
 
     if ((irqsts & ZLL_IRQSTS_CCAIRQ_MASK) &&
@@ -697,34 +689,36 @@ static void _isr_event_seq_ccca(netdev_t *netdev)
         kw41zrf_set_sequence(dev, dev->idle_state);
     }
 
-    kw41zrf_clear_irq_flags(handled_irqs);
+    return handled_irqs;
 }
 
 static void kw41zrf_netdev_isr(netdev_t *netdev)
 {
 
+    uint32_t irqsts = ZLL->IRQSTS;
+    uint32_t handled_irqs = 0;
     DEBUG("[kw41zrf] CTRL %08" PRIx32 ", IRQSTS %08" PRIx32 "\n",
-          ZLL->PHY_CTRL, ZLL->IRQSTS);
+          ZLL->PHY_CTRL, irqsts);
 
     switch ((ZLL->PHY_CTRL & ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ_SHIFT) {
         case XCVSEQ_RECEIVE:
-            _isr_event_seq_r(netdev);
+            handled_irqs |= _isr_event_seq_r(netdev, irqsts);
             break;
 
         case XCVSEQ_TRANSMIT:
-            _isr_event_seq_t(netdev);
+            handled_irqs |= _isr_event_seq_t(netdev, irqsts);
             break;
 
         case XCVSEQ_CCA:
-            _isr_event_seq_cca(netdev);
+            handled_irqs |= _isr_event_seq_cca(netdev, irqsts);
             break;
 
         case XCVSEQ_TX_RX:
-            _isr_event_seq_tr(netdev);
+            handled_irqs |= _isr_event_seq_tr(netdev, irqsts);
             break;
 
         case XCVSEQ_CONTINUOUS_CCA:
-            _isr_event_seq_ccca(netdev);
+            handled_irqs |= _isr_event_seq_ccca(netdev, irqsts);
             break;
 
         case XCVSEQ_IDLE:
@@ -736,19 +730,21 @@ static void kw41zrf_netdev_isr(netdev_t *netdev)
             break;
     }
 
-    uint32_t irqsts = ZLL->IRQSTS;
-    uint32_t handled_irqs = 0;
     if (irqsts & ZLL_IRQSTS_PLL_UNLOCK_IRQ_MASK) {
         DEBUG("[kw41zrf] untreated PLL_UNLOCK_IRQ\n");
         handled_irqs |= ZLL_IRQSTS_PLL_UNLOCK_IRQ_MASK;
-        irqsts &= ~ZLL_IRQSTS_PLL_UNLOCK_IRQ_MASK;
     }
     if (irqsts & ZLL_IRQSTS_WAKE_IRQ_MASK) {
         DEBUG("[kw41zrf] untreated WAKE_IRQ\n");
         handled_irqs |= ZLL_IRQSTS_WAKE_IRQ_MASK;
-        irqsts &= ~ZLL_IRQSTS_WAKE_IRQ_MASK;
+    }
+    if (irqsts & ZLL_IRQSTS_FILTERFAIL_IRQ_MASK) {
+        DEBUG("[kw41zrf] FILTERFAILIRQ: %04"PRIx32"\n", ZLL->FILTERFAIL_CODE);
+        handled_irqs |= ZLL_IRQSTS_FILTERFAIL_IRQ_MASK;
     }
     kw41zrf_clear_irq_flags(handled_irqs);
+    irqsts &= ~handled_irqs;
+
     if (irqsts & 0x000f017f) {
         DEBUG("[kw41zrf] IRQSTS contains untreated IRQs: 0x%08"PRIx32"\n",
               (irqsts & 0x000f017f));
