@@ -14,7 +14,7 @@
  * @file
  * @brief       get/set interfaces for kw41zrf driver
  *
- * @author      Johann Fischer <j.fischer@phytec.de>
+ * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  */
 
 #ifndef KW41ZRF_GETSET_H

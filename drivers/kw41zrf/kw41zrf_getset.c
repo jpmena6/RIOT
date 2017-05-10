@@ -12,10 +12,7 @@
  * @file
  * @brief       get/set functionality of kw41zrf driver
  *
- * @author      Johann Fischer <j.fischer@phytec.de>
- * @author      Jonas Remmert <j.remmert@phytec.de>
- * @author      Oliver Hahm <oliver.hahm@inria.fr>
- * @author      Sebastian Meiling <s@mlng.net>
+ * @author  Joakim Nohlgård <joakim.nohlgard@eistec.se>
  * @}
  */
 
@@ -26,14 +23,8 @@
 #include "kw41zrf_intern.h"
 #include "kw41zrf_getset.h"
 
-#define ENABLE_DEBUG (0)
+#define ENABLE_DEBUG (1)
 #include "debug.h"
-
-#define KW41ZRF_LQI_HW_MAX           230      /**< LQI Saturation Level */
-
-/* Modem_PA_PWR Register (PA Power Control) has a valid range from 3-31 */
-#define KW41ZRF_PA_RANGE_MAX      31       /**< Maximum value of PA Power Control Register */
-#define KW41ZRF_PA_RANGE_MIN      3        /**< Minimum value of PA Power Control Register */
 
 #define KW41ZRF_NUM_CHANNEL      (KW41ZRF_MAX_CHANNEL - KW41ZRF_MIN_CHANNEL + 1)
 
@@ -84,6 +75,7 @@ int kw41zrf_set_channel(kw41zrf_t *dev, uint8_t channel)
     }
 
     ZLL->CHANNEL_NUM0 = channel;
+    dev->netdev.chan = channel;
 
     LOG_DEBUG("[kw41zrf] set channel to %u\n", channel);
     return 0;
@@ -133,7 +125,7 @@ void kw41zrf_set_sequence(kw41zrf_t *dev, uint8_t seq)
     }
 
     DEBUG("[kw41zrf] set sequence to %u\n", (unsigned int)seq);
-    ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ(seq);
+    ZLL->PHY_CTRL = (ZLL->PHY_CTRL & ~ZLL_PHY_CTRL_XCVSEQ_MASK) | ZLL_PHY_CTRL_XCVSEQ(seq);
 }
 
 void kw41zrf_set_pan(kw41zrf_t *dev, uint16_t pan)
@@ -217,7 +209,7 @@ uint8_t kw41zrf_get_cca_mode(kw41zrf_t *dev)
 
 void kw41zrf_set_option(kw41zrf_t *dev, uint16_t option, bool state)
 {
-    DEBUG("[kw41zrf] set option %i to %i\n", option, state);
+    DEBUG("[kw41zrf] set option 0x%04x to %x\n", option, state);
 
     /* set option field */
     if (state) {

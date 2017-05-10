@@ -1,8 +1,9 @@
 /*
- * Copyright (C) 2017 Linaro Limited
  * Copyright (C) 2017 SKF AB
  *
- * SPDX-License-Identifier: Apache-2.0
+ * This file is subject to the terms and conditions of the GNU Lesser
+ * General Public License v2.1. See the file LICENSE in the top level
+ * directory for more details.
  */
 
 /**
@@ -10,8 +11,6 @@
  * @{
  * @file
  * @brief       Basic functionality of kw41zrf driver
- *
- * This implementation is based on the KW41Z IEEE802.15.4 driver in Zephyr OS
  *
  * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  * @}
@@ -107,7 +106,9 @@ int kw41zrf_init(kw41zrf_t *dev, gpio_cb_t cb)
     /* Configre Radio IRQ */
     kw41zrf_set_irq_callback(cb, dev);
     NVIC_ClearPendingIRQ(Radio_1_IRQn);
+    NVIC_ClearPendingIRQ(Radio_0_IRQn);
     NVIC_EnableIRQ(Radio_1_IRQn);
+    NVIC_EnableIRQ(Radio_0_IRQn);
 
     kw41zrf_abort_sequence(dev);
     kw41zrf_unmask_irqs();

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 PHYTEC Messtechnik GmbH
+ * Copyright (C) 2017 SKF AB
  *
  * This file is subject to the terms and conditions of the GNU Lesser General
  * Public License v2.1. See the file LICENSE in the top level directory for more
@@ -12,7 +12,7 @@
  * @file
  * @brief       Internal function of kw41zrf driver
  *
- * @author      Johann Fischer <j.fischer@phytec.de>
+ * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  * @}
  */
 
@@ -111,7 +111,7 @@ int kw41zrf_can_switch_to_idle(kw41zrf_t *dev)
     uint8_t seq = (ZLL->PHY_CTRL & ZLL_PHY_CTRL_XCVSEQ_MASK) >> ZLL_PHY_CTRL_XCVSEQ_SHIFT;
     uint8_t actual = (ZLL->SEQ_CTRL_STS & ZLL_SEQ_CTRL_STS_XCVSEQ_ACTUAL_MASK) >> ZLL_SEQ_CTRL_STS_XCVSEQ_ACTUAL_SHIFT;
 
-    DEBUG("[kw41zrf] XCVSEQ_ACTUAL=0x%x, XCVSEQ=0x%02x, SEQ_STATE=%x\n", actual, seq,
+    DEBUG("[kw41zrf] XCVSEQ_ACTUAL=0x%x, XCVSEQ=0x%x, SEQ_STATE=0x%" PRIx32 "\n", actual, seq,
         (ZLL->SEQ_STATE & ZLL_SEQ_STATE_SEQ_STATE_MASK) >> ZLL_SEQ_STATE_SEQ_STATE_SHIFT);
 
     switch (seq)
@@ -213,7 +213,7 @@ void kw41zrf_abort_rx_ops_disable(kw41zrf_t *dev)
 
 void kw41zrf_seq_timeout_on(kw41zrf_t *dev, uint32_t timeout)
 {
-    kw41zrf_mask_irqs();
+//     kw41zrf_mask_irqs();
     kw41zrf_timer_set(dev, &ZLL->T4CMP, timeout);
 
     /* enable and clear irq for timer 4 */
@@ -224,7 +224,7 @@ void kw41zrf_seq_timeout_on(kw41zrf_t *dev, uint32_t timeout)
 
     /* Enable T4 Compare */
     bit_set32(&ZLL->PHY_CTRL, ZLL_PHY_CTRL_TMR4CMP_EN_SHIFT);
-    kw41zrf_unmask_irqs();
+//     kw41zrf_unmask_irqs();
 }
 
 void kw41zrf_seq_timeout_off(kw41zrf_t *dev)
@@ -240,8 +240,18 @@ uint32_t kw41zrf_get_timestamp(kw41zrf_t *dev)
     return ZLL->TIMESTAMP;
 }
 
+void isr_radio_int0(void)
+{
+    DEBUG("[kw41zrf] INT0\n");
+    if (isr_config.cb != NULL) {
+        isr_config.cb(isr_config.arg);
+    }
+    cortexm_isr_end();
+}
+
 void isr_radio_int1(void)
 {
+    DEBUG("[kw41zrf] INT1\n");
     if (isr_config.cb != NULL) {
         isr_config.cb(isr_config.arg);
     }

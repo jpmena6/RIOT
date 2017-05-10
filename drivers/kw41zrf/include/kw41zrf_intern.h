@@ -14,7 +14,7 @@
  * @file
  * @brief       Internal function interfaces for kw41zrf driver
  *
- * @author      Johann Fischer <j.fischer@phytec.de>
+ * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  */
 
 #ifndef KW2XRF_INTERN_H
