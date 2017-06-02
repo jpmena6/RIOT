@@ -99,7 +99,7 @@ static void kinetis_mcg_enable_osc(void)
 
     /* Enable RF oscillator circuit */
     /* Current setting is that the OSC only runs in RUN and WAIT modes, see ref.man. */
-    RSIM->CONTROL = (RSIM->CONTROL & ~RSIM_CONTROL_RF_OSC_EN_MASK) | RSIM_CONTROL_RF_OSC_EN(1);
+    RSIM->CONTROL = (RSIM->CONTROL & ~RSIM_CONTROL_RF_OSC_EN_MASK) | RSIM_CONTROL_RF_OSC_EN(0b1111));
     /* Chip errata
      * e10224: RSIM: XTAL_OUT_EN signal from the pin is enabled by default
      *

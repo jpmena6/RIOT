@@ -23,20 +23,45 @@
 
 #include "periph/pm.h"
 
-#define ENABLE_DEBUG (0)
+#define ENABLE_DEBUG (1)
 #include "debug.h"
 
-/**
- * @note    The current PM implementation is very much simplified down to only
- *          using the 'WAIT' mode. This implementation must be further expanded
- *          to make use of the available and more efficient (deep) sleep modes
- *          of the Kinetis CPUs.
- */
+/* SMC_PMCTRL_STOPM masks */
+enum {
+    SMC_PMCTRL_STOPM_STOP = 0,
+    /* 1 is reserved */
+    SMC_PMCTRL_STOPM_VLPS = 2,
+    SMC_PMCTRL_STOPM_LLS  = 3,
+    /* VLLS is not supported */
+};
+
+/** Configure which stop mode will be entered when cortexm_sleep(1) is called */
+static inline void pm_stopm(uint8_t stopm)
+{
+    SMC->PMCTRL = (SMC->PMCTRL & ~(SMC_PMCTRL_STOPM_MASK)) | SMC_PMCTRL_STOPM(stopm);
+}
+
 void pm_set(unsigned mode)
 {
+    unsigned deep = 1;
     switch (mode) {
-        case 0:
-            cortexm_sleep(0);
+        case KINETIS_PM_WAIT:
+            /* WAIT */
+            deep = 0;
+            break;
+        case KINETIS_PM_STOP:
+            /* STOP */
+            pm_stopm(SMC_PMCTRL_STOPM_STOP);
+            break;
+        case KINETIS_PM_VLPS:
+            /* VLPS */
+            pm_stopm(SMC_PMCTRL_STOPM_VLPS);
+            break;
+        case KINETIS_PM_LLS:
+            /* LLSx */
+            pm_stopm(SMC_PMCTRL_STOPM_LLS);
             break;
     }
+    DEBUG("pm_set(%u)\n", mode);
+    cortexm_sleep(deep);
 }
