@@ -31,6 +31,7 @@
 #include "board.h"
 #include "periph_conf.h"
 #include "periph/timer.h"
+#include "pm_layered.h"
 
 #ifdef PIT_LTMR64H_LTH_MASK
 /* The KW41Z PIT module provides only one IRQ for all PIT channels combined. */
@@ -304,6 +305,7 @@ inline static void pit_start(uint8_t dev)
     PIT->CHANNEL[ch].LDVAL = pit[dev].ldval;
     pit[dev].count += pit[dev].ldval;
     PIT->CHANNEL[ch].TCTRL = pit[dev].tctrl;
+    pm_block(KINETIS_PM_STOP);
 }
 
 inline static void pit_stop(uint8_t dev)
@@ -318,6 +320,7 @@ inline static void pit_stop(uint8_t dev)
     PIT->CHANNEL[ch].TCTRL = 0;
     pit[dev].count -= cval;
     pit[dev].ldval = cval;
+    pm_unblock(KINETIS_PM_STOP);
 }
 
 inline static void pit_irq_handler(tim_t dev)
