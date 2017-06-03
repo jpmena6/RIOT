@@ -99,7 +99,7 @@ static void kinetis_mcg_enable_osc(void)
 
     /* Enable RF oscillator circuit */
     /* Current setting is that the OSC only runs in RUN and WAIT modes, see ref.man. */
-    RSIM->CONTROL = (RSIM->CONTROL & ~RSIM_CONTROL_RF_OSC_EN_MASK) | RSIM_CONTROL_RF_OSC_EN(1);
+    RSIM->CONTROL = (RSIM->CONTROL & ~RSIM_CONTROL_RF_OSC_EN_MASK) | RSIM_CONTROL_RF_OSC_EN(0b1111);
     /* Chip errata
      * e10224: RSIM: XTAL_OUT_EN signal from the pin is enabled by default
      *
@@ -432,6 +432,9 @@ void kinetis_mcg_init(void)
 
     /* Set external reference clock divider for the FLL */
     MCG->C1 = (MCG->C1 & ~MCG_C1_FRDIV_MASK) | MCG_C1_FRDIV(clock_config.fll_frdiv);
+
+    /* Let the MCGIRCLK run in STOP modes */
+    bit_set8(&MCG->C1, MCG_C1_IREFSTEN_SHIFT);
 
 #if KINETIS_HAVE_PLL
     /* set ERC divider for the PLL */
