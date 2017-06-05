@@ -171,6 +171,11 @@ static inline void _lltimer_set(uint32_t target)
 
 void _xtimer_set_absolute(xtimer_t *timer, uint32_t target, uint32_t now)
 {
+    unsigned state = irq_disable();
+    if (_is_set(timer)) {
+        _remove(timer);
+    }
+
     DEBUG("timer_set_absolute(): now=%" PRIu32 " target=%" PRIu32 "\n", now, target);
 
     timer->next = NULL;
@@ -178,14 +183,10 @@ void _xtimer_set_absolute(xtimer_t *timer, uint32_t target, uint32_t now)
      * is no need to check for (target > now) first. */
     if ((target - now) < XTIMER_BACKOFF) {
         /* backoff */
+        irq_restore(state);
         xtimer_spin_until(target + XTIMER_BACKOFF);
         _shoot(timer);
         return;
-    }
-
-    unsigned state = irq_disable();
-    if (_is_set(timer)) {
-        _remove(timer);
     }
 
     timer->target = target;
