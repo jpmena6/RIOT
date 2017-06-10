@@ -112,10 +112,10 @@ typedef uint16_t gpio_t;
 #define PM_NUM_MODES    (4U)
 
 enum {
-    KINETIS_PM_WAIT = 0,
-    KINETIS_PM_STOP = 1,
-    KINETIS_PM_VLPS = 2,
-    KINETIS_PM_LLS  = 3,
+    KINETIS_PM_LLS  = 0,
+    KINETIS_PM_VLPS = 1,
+    KINETIS_PM_STOP = 2,
+    KINETIS_PM_WAIT = 3,
 };
 
 #ifndef DOXYGEN
