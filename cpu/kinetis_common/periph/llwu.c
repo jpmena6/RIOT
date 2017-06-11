@@ -22,7 +22,7 @@
 #include "bit.h"
 #include "llwu.h"
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 #include "debug.h"
 
 void llwu_init(void)
@@ -35,6 +35,9 @@ void llwu_init(void)
 
     /* Enable LLWU interrupt, or else we can never resume from LLS */
     NVIC_EnableIRQ(LLWU_IRQn);
+    /* LLWU needs to have the lowest possible priority, or it will block the
+     * other modules from performing their IRQ handling */
+    NVIC_SetPriority(LLWU_IRQn, 0xff);
 
     /* Enable all wakeup modules */
     LLWU->ME = 0xff;

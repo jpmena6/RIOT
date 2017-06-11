@@ -335,6 +335,8 @@ KINETIS_UART_WRITE_INLINE void uart_write_lpuart(uart_t uart, const uint8_t *dat
         while ((dev->STAT & LPUART_STAT_TDRE_MASK) == 0) {}
         dev->DATA = data[i];
     }
+    /* Wait for transmission complete */
+    while ((dev->STAT & LPUART_STAT_TC_MASK) == 0) {}
 }
 
 static inline void irq_handler_lpuart(uart_t uart)
