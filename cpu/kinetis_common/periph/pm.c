@@ -23,7 +23,7 @@
 
 #include "periph/pm.h"
 
-#define ENABLE_DEBUG (0)
+#define ENABLE_DEBUG (1)
 #include "debug.h"
 
 /* SMC_PMCTRL_STOPM masks */
@@ -59,8 +59,8 @@ void pm_set(unsigned mode)
             break;
         case KINETIS_PM_LLS:
             /* LLSx */
-            pm_stopm(SMC_PMCTRL_STOPM_VLPS);
-//             pm_stopm(SMC_PMCTRL_STOPM_LLS);
+//             pm_stopm(SMC_PMCTRL_STOPM_VLPS);
+            pm_stopm(SMC_PMCTRL_STOPM_LLS);
             break;
     }
     DEBUG("pm_set(%u)\n", mode);

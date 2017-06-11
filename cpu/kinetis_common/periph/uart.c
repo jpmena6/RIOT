@@ -28,6 +28,7 @@
 #include "bit.h"
 #include "periph_conf.h"
 #include "periph/uart.h"
+#include "pm_layered.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -96,6 +97,10 @@ int uart_init(uart_t uart, uint32_t baudrate, uart_rx_cb_t rx_cb, void *arg)
 {
     assert(uart < UART_NUMOF);
 
+    if (config[uart].rx_cb) {
+        pm_unblock(KINETIS_PM_LLS);
+    }
+
     /* remember callback addresses */
     config[uart].rx_cb = rx_cb;
     config[uart].arg = arg;
@@ -118,6 +123,13 @@ int uart_init(uart_t uart, uint32_t baudrate, uart_rx_cb_t rx_cb, void *arg)
 #endif
         default:
             return UART_NODEV;
+    }
+
+    if (config[uart].rx_cb) {
+        /* UART receiver is stopped in LLS, prevent LLS when there is a
+         * configured listener */
+        DEBUG("uart: Blocking LLS\n");
+//         pm_block(KINETIS_PM_LLS);
     }
     return UART_OK;
 }

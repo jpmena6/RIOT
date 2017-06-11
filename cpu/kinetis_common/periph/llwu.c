@@ -20,6 +20,7 @@
 
 #include "cpu.h"
 #include "bit.h"
+#include "llwu.h"
 
 #define ENABLE_DEBUG (1)
 #include "debug.h"
@@ -33,7 +34,7 @@ void llwu_init(void)
 #endif
 
     /* Enable LLWU interrupt, or else we can never resume from LLS */
-    NVIC_EnableIRQ(LLW_IRQn);
+    NVIC_EnableIRQ(LLWU_IRQn);
 
     /* Enable all wakeup modules */
     LLWU->ME = 0xff;
@@ -41,11 +42,16 @@ void llwu_init(void)
 
 void isr_llwu(void)
 {
-    uint32_t flags = LLWU->F1 | (LLWU->F2 << 8);
-    /* Clear LLWU flags */
+//     uint32_t flags = LLWU->F1 | (LLWU->F2 << 8);
+    irq_enable();
+    /* Clear LLWU pin interrupt flags */
     LLWU->F1 = LLWU->F1;
     LLWU->F2 = LLWU->F2;
     /* Read only register F3, the flag will need to be cleared in the peripheral
      * instead of writing a 1 to the MWUFx bit. */
     /* LLWU->F3 = 0xFF; */
+
+    DEBUG("LLWU IRQ\n");
+
+    cortexm_isr_end();
 }

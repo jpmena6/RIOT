@@ -30,6 +30,7 @@
 #include "bit.h"
 #include "board.h"
 #include "periph_conf.h"
+#include "llwu.h"
 #include "periph/timer.h"
 #include "pm_layered.h"
 
@@ -542,6 +543,7 @@ inline static void lptmr_start(uint8_t dev)
         return;
     }
     lptmr[dev].running = 1;
+    llwu_wakeup_module_enable(LLWU_WAKEUP_MODULE_LPTMR0);
     _lptmr_set_counter(dev);
 }
 
