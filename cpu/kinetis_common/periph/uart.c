@@ -126,10 +126,10 @@ int uart_init(uart_t uart, uint32_t baudrate, uart_rx_cb_t rx_cb, void *arg)
     }
 
     if (config[uart].rx_cb) {
-        /* UART receiver is stopped in LLS, prevent LLS when there is a
-         * configured listener */
+        /* UART and LPUART receivers are stopped in LLS, prevent LLS when there
+         * is a configured RX callback*/
         DEBUG("uart: Blocking LLS\n");
-//         pm_block(KINETIS_PM_LLS);
+        pm_block(KINETIS_PM_LLS);
     }
     return UART_OK;
 }
