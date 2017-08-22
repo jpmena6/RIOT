@@ -528,6 +528,12 @@ ifneq (,$(filter netstats_%, $(USEMODULE)))
   USEMODULE += netstats
 endif
 
+ifneq (,$(filter gnrc_contikimac,$(USEMODULE)))
+  USEMODULE += gnrc_mac
+  USEMODULE += gnrc_netdev
+  USEMODULE += xtimer
+endif
+
 ifneq (,$(filter gnrc_lwmac,$(USEMODULE)))
   USEMODULE += gnrc_mac
   USEMODULE += gnrc_netdev
