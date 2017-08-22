@@ -24,6 +24,9 @@
 #include "net/gnrc/netdev.h"
 #include "net/gnrc/netdev/ieee802154.h"
 #include "net/gnrc.h"
+#if MODULE_GNRC_CONTIKIMAC
+#include "net/gnrc/contikimac/contikimac.h"
+#endif
 
 #include "kw41zrf.h"
 
@@ -55,8 +58,13 @@ void auto_init_kw41zrf(void)
             LOG_ERROR("[auto_init_netif] error initializing kw41zrf #%u\n", i);
         }
         else {
+#if MODULE_GNRC_CONTIKIMAC
+            gnrc_contikimac_init(_kw41zrf_stacks[i], KW41ZRF_MAC_STACKSIZE,
+                             KW41ZRF_MAC_PRIO, "kw41zrf-contikimac", &gnrc_adpt[i]);
+#else
             gnrc_netdev_init(_kw41zrf_stacks[i], KW41ZRF_MAC_STACKSIZE,
-                             KW41ZRF_MAC_PRIO, "kw41zrf", &gnrc_adpt[i]);
+                             KW41ZRF_MAC_PRIO, "kw41zrf-netdev", &gnrc_adpt[i]);
+#endif
         }
     }
 }
