@@ -73,6 +73,9 @@ endif
 ifneq (,$(filter gnrc_pkt,$(USEMODULE)))
   DIRS += pkt
 endif
+ifneq (,$(filter gnrc_contikimac,$(USEMODULE)))
+    DIRS += link_layer/contikimac
+endif
 ifneq (,$(filter gnrc_lwmac,$(USEMODULE)))
   DIRS += link_layer/lwmac
 endif
