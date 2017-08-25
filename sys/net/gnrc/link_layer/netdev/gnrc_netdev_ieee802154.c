@@ -196,6 +196,10 @@ static int _send(gnrc_netdev_t *gnrc_netdev, gnrc_pktsnip_t *pkt)
         src_len = IEEE802154_SHORT_ADDRESS_LEN;
         src = state->short_addr;
     }
+    if (netif_hdr->flags & GNRC_NETIF_HDR_FLAGS_FRAME_PENDING) {
+        /* More packets will follow this packet */
+        flags |= IEEE802154_FCF_FRAME_PEND;
+    }
     /* fill MAC header, seq should be set by device */
     if ((res = ieee802154_set_frame_hdr(mhr, src, src_len,
                                         dst, dst_len, dev_pan,

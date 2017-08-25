@@ -56,7 +56,7 @@ extern "C" {
  *          If the link layer does not support broadcast the packet must be
  *          dropped silently.
  */
-#define GNRC_NETIF_HDR_FLAGS_BROADCAST  (0x80)
+#define GNRC_NETIF_HDR_FLAGS_BROADCAST     (0x80)
 
 /**
  * @brief   Send packet multicast.
@@ -69,7 +69,19 @@ extern "C" {
  *          If the link layer does not support multicast it should interpret
  *          this flag the same way it does @ref GNRC_NETIF_HDR_FLAGS_BROADCAST.
  */
-#define GNRC_NETIF_HDR_FLAGS_MULTICAST  (0x40)
+#define GNRC_NETIF_HDR_FLAGS_MULTICAST     (0x40)
+
+/**
+ * @brief   Signal to the MAC layer that the packet is part of a burst of packets
+ *
+ * @details This bit informs the MAC layer that there will be more data to
+ *          follow very shortly after the current packet, so the MAC layer may
+ *          defer putting the network interface device to sleep until another
+ *          packet has been processed. Setting this bit on an outgoing
+ *          IEEE 802.15.4 packet will set the Frame Pending bit in the MHR,
+ *          other protocols may have similar bits.
+ */
+#define GNRC_NETIF_HDR_FLAGS_FRAME_PENDING (0x20)
 /**
  * @}
  */
