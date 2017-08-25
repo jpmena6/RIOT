@@ -47,14 +47,20 @@
 /* These numbers are OK for IEEE 802.15.4 O-QPSK 250 kbit/s */
 /* (usec) Tc, time between each successive CCA */
 #define CONTIKIMAC_CCA_SLEEP_TIME (500u)
+/* (usec) Tr, time required for a single CCA check */
+/* depends on both radio hardware and software delays, add some margin to
+ * account for variations in software implementations and hardware */
+#define CONTIKIMAC_CCA_CHECK_TIME (200u)
 /* (usec) Ti, time between successive retransmissions, must be less than Tc */
 #define CONTIKIMAC_INTER_PACKET_INTERVAL (400u)
 /* (usec) maximum time to wait for the next packet in a burst */
 #define CONTIKIMAC_INTER_PACKET_DEADLINE (32000u)
 /* (usec) Maximum time to remain awake after a CCA detection */
 #define CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED (12500u)
+/* (usec) time for a complete channel check cycle with CONTIKIMAC_CCA_COUNT_MAX number of CCAs */
+#define CONTIKIMAC_CHECK_TIME (CONTIKIMAC_CCA_COUNT_MAX * (CONTIKIMAC_CCA_CHECK_TIME + CONTIKIMAC_CCA_SLEEP_TIME))
 /* (usec) Maximum time to keep retransmitting the same packet before giving up */
-#define CONTIKIMAC_STROBE_TIME (CONTIKIMAC_CYCLE_TIME + 2 * )
+#define CONTIKIMAC_STROBE_TIME (CONTIKIMAC_CYCLE_TIME + 2 * CONTIKIMAC_CHECK_TIME)
 
 /* Size of message queue */
 #define CONTIKIMAC_MSG_QUEUE_SIZE 8
@@ -114,11 +120,23 @@ static void _event_cb(netdev_t *dev, netdev_event_t event)
 #ifdef MODULE_NETSTATS_L2
                 dev->stats.tx_failed++;
 #endif
+                {
+                    msg_t msg = {.type = CONTIKIMAC_MSG_TYPE_TX_NOACK};
+                    if (msg_send(&msg, gnrc_netdev->pid) <= 0) {
+                        LOG_ERROR("gnrc_contikimac(%d): lost TX_NOACK", thread_getpid());
+                    }
+                }
                 break;
             case NETDEV_EVENT_TX_COMPLETE:
 #ifdef MODULE_NETSTATS_L2
                 dev->stats.tx_success++;
 #endif
+                {
+                    msg_t msg = {.type = CONTIKIMAC_MSG_TYPE_TX_OK};
+                    if (msg_send(&msg, gnrc_netdev->pid) <= 0) {
+                        LOG_ERROR("gnrc_contikimac(%d): lost TX_OK", thread_getpid());
+                    }
+                }
                 break;
             default:
                 DEBUG("gnrc_contikimac(%d): warning: unhandled event %u.\n",
@@ -286,16 +304,29 @@ static void *_gnrc_contikimac_thread(void *args)
                         break;
                     }
                     /* Schedule the next wake up */
-                    xtimer_periodic_msg(&timer, &last_wakeup, CONTIKIMAC_CHANNEL_CHECK_INTERVAL,
-                                        &sleep_msg, thread_getpid());
+                    xtimer_periodic_msg(&timer_channel_check, &last_channel_check,
+                                        CONTIKIMAC_CYCLE_TIME,
+                                        &msg_channel_check, thread_getpid());
                 }
                 break;
             }
             case CONTIKIMAC_MSG_TYPE_TX_NOACK:
-                break;
+                assert(current_tx);
+                assert(tx_in_progress);
+                /* Keep retransmitting until STROBE_TIME has passed */
+                if (xtimer_less(xtimer_now(), tx_timeout)) {
+                    gnrc_pktbuf_hold(current_tx, 1);
+                    gnrc_netdev->send(gnrc_netdev, current_tx);
+                    break;
+                }
+                /* Timeout */
+                /* fall through */
             case CONTIKIMAC_MSG_TYPE_TX_OK:
                 /* TX done, OK to release */
+                assert(current_tx);
+                assert(tx_in_progress);
                 gnrc_pktbuf_release(current_tx);
+                tx_in_progress = false;
                 break;
             case NETDEV_MSG_TYPE_EVENT:
                 DEBUG("gnrc_contikimac(%d): GNRC_NETDEV_MSG_TYPE_EVENT received\n",
@@ -316,7 +347,7 @@ static void *_gnrc_contikimac_thread(void *args)
                 /* Hold until we have confirmed this packet delivered, or too
                  * many retransmissions */
                 gnrc_pktbuf_hold(current_tx, 1);
-                tx_timeout = xtimer_now_usec() + ;
+                tx_timeout = xtimer_ticks_from_usec(xtimer_now_usec() + CONTIKIMAC_STROBE_TIME);
                 tx_in_progress = true;
                 gnrc_netdev->send(gnrc_netdev, current_tx);
                 break;
