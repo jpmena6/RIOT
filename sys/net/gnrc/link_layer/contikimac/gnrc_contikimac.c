@@ -30,7 +30,7 @@
 
 #include "log.h"
 
-#define ENABLE_DEBUG    (0)
+#define ENABLE_DEBUG    (1)
 #include "debug.h"
 
 #if defined(MODULE_OD) && ENABLE_DEBUG
@@ -239,6 +239,11 @@ static void *_gnrc_contikimac_thread(void *args)
             case CONTIKIMAC_MSG_TYPE_RADIO_OFF:
                 DEBUG("gnrc_contikimac(%d): Going to sleep\n", thread_getpid());
                 res = dev->driver->set(dev, NETOPT_STATE, &state_sleep, sizeof(state_sleep));
+                if (res < 0) {
+                    DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_SLEEP: %d\n",
+                          thread_getpid(), res);
+                    break;
+                }
                 break;
             case CONTIKIMAC_MSG_TYPE_RX_BEGIN:
             {
