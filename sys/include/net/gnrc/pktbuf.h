@@ -230,6 +230,7 @@ gnrc_pktsnip_t *gnrc_pktbuf_replace_snip(gnrc_pktsnip_t *pkt, gnrc_pktsnip_t *ol
  *        as a continuous snip.
  *
  *          Example:
+ *
  *              Input:
  *                                                                  buffer
  *              +---------------------------+                      +------+
