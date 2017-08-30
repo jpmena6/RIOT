@@ -164,6 +164,52 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt)
 }
 
 /**
+ * @brief  Transmit a packet until timeout or an Ack has been received
+ *
+ * @pre Packet data has been preloaded
+ *
+ * @param[in]  dev  network device
+ */
+static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
+{
+    gnrc_netif_hdr_t *netif_hdr = pkt->data;
+
+    xtimer_ticks32_t tx_timeout = xtimer_ticks_from_usec(xtimer_now_usec() + CONTIKIMAC_STROBE_TIME);
+    bool do_transmit = true;
+    do {
+        if (do_transmit) {
+            do_transmit = false;
+            thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK);
+            static const netopt_state_t state_tx = NETOPT_STATE_TX;
+            dev->driver->set(dev, NETOPT_STATE, &state_tx, sizeof(state_tx));
+        }
+        thread_flags_t txflags = thread_flags_wait_any(
+            CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK |
+            CONTIKIMAC_THREAD_FLAG_ISR);
+        if (txflags & CONTIKIMAC_THREAD_FLAG_ISR) {
+            /* Let the driver handle the IRQ */
+            dev->driver->isr(dev);
+        }
+        if (txflags & CONTIKIMAC_THREAD_FLAG_TX_NOACK) {
+            /* retransmit */
+            do_transmit = true;
+        }
+        if (txflags & CONTIKIMAC_THREAD_FLAG_TX_OK) {
+            /* For broadcast and multicast, always transmit for the full
+             * duration of STROBE_TIME. */
+            if (netif_hdr->flags &
+                (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) {
+                do_transmit = true;
+                continue;
+            }
+            break;
+        }
+        /* Keep retransmitting until STROBE_TIME has passed, or until we
+         * receive an Ack. */
+    } while(xtimer_less(xtimer_now(), tx_timeout));
+}
+
+/**
  * @brief   Startup code and event loop of the gnrc_contikimac layer
  *
  * @param[in] args  expects a pointer to a netdev_t struct
@@ -225,6 +271,13 @@ static void *_gnrc_contikimac_thread(void *args)
     if (res < 0) {
         LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_TX_END_IRQ failed: %d\n",
                     thread_getpid(), res);
+    }
+    res = dev->driver->set(dev, NETOPT_PRELOADING, &enable, sizeof(enable));
+    if (res < 0) {
+        LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_PRELOADING failed: %d\n",
+                    thread_getpid(), res);
+        LOG_ERROR("gnrc_contikimac requires NETOPT_PRELOADING, this node will "
+                  "likely not be able to communicate with other nodes!\n");
     }
 
     xtimer_ticks32_t last_channel_check = xtimer_now();
@@ -340,43 +393,12 @@ static void *_gnrc_contikimac_thread(void *args)
                     /* TODO enqueue packets */
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_SND received\n",
                         thread_getpid());
+                    /* Hold until we are done */
+                    /* TODO cache the important info */
                     gnrc_pktsnip_t *pkt = msg.content.ptr;
-                    gnrc_netif_hdr_t *netif_hdr = pkt->data;
-                    xtimer_ticks32_t tx_timeout = xtimer_ticks_from_usec(xtimer_now_usec() + CONTIKIMAC_STROBE_TIME);
-                    bool do_transmit = true;
-                    do {
-                        if (do_transmit) {
-                            /* Hold until we have confirmed this packet delivered, or too
-                             * many retransmissions */
-                            do_transmit = false;
-                            gnrc_pktbuf_hold(pkt, 1);
-                            thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK);
-                            gnrc_netdev->send(gnrc_netdev, pkt);
-                        }
-                        thread_flags_t txflags = thread_flags_wait_any(
-                            CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK |
-                            CONTIKIMAC_THREAD_FLAG_ISR);
-                        if (txflags & CONTIKIMAC_THREAD_FLAG_ISR) {
-                            /* Let the driver handle the IRQ */
-                            dev->driver->isr(dev);
-                        }
-                        if (txflags & CONTIKIMAC_THREAD_FLAG_TX_NOACK) {
-                            /* retransmit */
-                            do_transmit = true;
-                        }
-                        if (txflags & CONTIKIMAC_THREAD_FLAG_TX_OK) {
-                            /* For broadcast and multicast, always transmit for the full
-                             * duration of STROBE_TIME. */
-                            if (netif_hdr->flags &
-                                (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) {
-                                do_transmit = true;
-                                continue;
-                            }
-                            break;
-                        }
-                        /* Keep retransmitting until STROBE_TIME has passed, or until we
-                         * receive an Ack. */
-                    } while(xtimer_less(xtimer_now(), tx_timeout));
+                    gnrc_pktbuf_hold(pkt, 1);
+                    gnrc_netdev->send(gnrc_netdev, pkt);
+                    gnrc_contikimac_send(dev, pkt);
                     gnrc_pktbuf_release(pkt);
                     break;
                 }
