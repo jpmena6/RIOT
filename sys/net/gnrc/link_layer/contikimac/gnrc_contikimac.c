@@ -195,14 +195,18 @@ static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
             do_transmit = true;
         }
         if (txflags & CONTIKIMAC_THREAD_FLAG_TX_OK) {
+            /* For unicast, stop after receiving the first Ack */
+            if ((netif_hdr->flags &
+                (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) == 0) {
+                break;
+            }
             /* For broadcast and multicast, always transmit for the full
              * duration of STROBE_TIME. */
-            if (netif_hdr->flags &
-                (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) {
-                do_transmit = true;
-                continue;
-            }
-            break;
+            do_transmit = true;
+        }
+        if (do_transmit) {
+            /* Wait for a short while before retransmitting */
+            xtimer_usleep(CONTIKIMAC_INTER_PACKET_INTERVAL);
         }
         /* Keep retransmitting until STROBE_TIME has passed, or until we
          * receive an Ack. */
