@@ -26,7 +26,7 @@ size_t ieee802154_set_frame_hdr(uint8_t *buf, const uint8_t *src, size_t src_len
                                 le_uint16_t src_pan, le_uint16_t dst_pan,
                                 uint8_t flags, uint8_t seq)
 {
-    int pos = 3;    /* 0-1: FCS, 2: seq */
+    int pos = 3;    /* 0-1: FCF, 2: seq */
     uint8_t type = (flags & IEEE802154_FCF_TYPE_MASK);
 
     buf[0] = flags;
