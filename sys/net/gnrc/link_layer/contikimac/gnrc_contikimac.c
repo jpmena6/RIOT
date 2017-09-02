@@ -51,7 +51,7 @@
 /* (usec) Tr, time required for a single CCA check */
 /* depends on both radio hardware and software delays, add some margin to
  * account for variations in software implementations and hardware */
-#define CONTIKIMAC_CCA_CHECK_TIME (200u)
+#define CONTIKIMAC_CCA_CHECK_TIME (300u)
 /* (usec) Ti, time between successive retransmissions, must be less than Tc */
 #define CONTIKIMAC_INTER_PACKET_INTERVAL (400u)
 /* (usec) maximum time to wait for the next packet in a burst */
@@ -112,7 +112,7 @@ static void _event_cb(netdev_t *dev, netdev_event_t event)
         switch(event) {
             case NETDEV_EVENT_RX_COMPLETE:
                 {
-                    LOG_ERROR("RXOK\n");
+                    DEBUG("RXOK\n");
                     gnrc_pktsnip_t *pkt = gnrc_netdev->recv(gnrc_netdev);
 
                     if (pkt) {
@@ -176,8 +176,10 @@ static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
 
     xtimer_ticks32_t tx_timeout = xtimer_ticks_from_usec(xtimer_now_usec() + CONTIKIMAC_STROBE_TIME);
     bool do_transmit = true;
+//     uint32_t time_before = 0;
     do {
         if (do_transmit) {
+//             time_before = xtimer_now_usec();
             do_transmit = false;
             thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK);
             static const netopt_state_t state_tx = NETOPT_STATE_TX;
@@ -198,6 +200,8 @@ static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
             /* For unicast, stop after receiving the first Ack */
             if ((netif_hdr->flags &
                 (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) == 0) {
+//                 uint32_t time_after = xtimer_now_usec();
+//                 LOG_ERROR("O: %lu\n", time_after - time_before);
                 break;
             }
             /* For broadcast and multicast, always transmit for the full
@@ -206,11 +210,25 @@ static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
         }
         if (do_transmit) {
             /* Wait for a short while before retransmitting */
+//             uint32_t time_after = xtimer_now_usec();
+//             LOG_ERROR("N: %lu\n", time_after - time_before);
             xtimer_usleep(CONTIKIMAC_INTER_PACKET_INTERVAL);
         }
         /* Keep retransmitting until STROBE_TIME has passed, or until we
          * receive an Ack. */
     } while(xtimer_less(xtimer_now(), tx_timeout));
+}
+
+void gnrc_contikimac_radio_sleep(netdev_t *dev)
+{
+    static const netopt_state_t state_sleep = NETOPT_STATE_SLEEP;
+    DEBUG("gnrc_contikimac(%d): Going to sleep\n", thread_getpid());
+    int res = dev->driver->set(dev, NETOPT_STATE, &state_sleep, sizeof(state_sleep));
+    if (res < 0) {
+        DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_SLEEP: %d\n",
+              thread_getpid(), res);
+    }
+    LED1_OFF;
 }
 
 /**
@@ -256,6 +274,18 @@ static void *_gnrc_contikimac_thread(void *args)
 
     /* Enable RX- and TX-started interrupts */
     static const netopt_enable_t enable = NETOPT_ENABLE;
+    static const netopt_enable_t disable = NETOPT_DISABLE;
+    static const uint8_t zero = 0;
+    res = dev->driver->set(dev, NETOPT_CSMA, &disable, sizeof(disable));
+    if (res < 0) {
+        LOG_ERROR("gnrc_contikimac(%d): disable NETOPT_CSMA failed: %d\n",
+                    thread_getpid(), res);
+    }
+    res = dev->driver->set(dev, NETOPT_RETRANS, &zero, sizeof(zero));
+    if (res < 0) {
+        LOG_ERROR("gnrc_contikimac(%d): disable NETOPT_RETRANS failed: %d\n",
+                    thread_getpid(), res);
+    }
     res = dev->driver->set(dev, NETOPT_RX_START_IRQ, &enable, sizeof(enable));
     if (res < 0) {
         LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_RX_START_IRQ failed: %d\n",
@@ -286,7 +316,6 @@ static void *_gnrc_contikimac_thread(void *args)
 
     xtimer_ticks32_t last_channel_check = xtimer_now();
 
-    static const netopt_state_t state_sleep   = NETOPT_STATE_SLEEP;
     static const netopt_state_t state_standby = NETOPT_STATE_STANDBY;
     static const netopt_state_t state_listen  = NETOPT_STATE_IDLE;
 
@@ -303,15 +332,7 @@ static void *_gnrc_contikimac_thread(void *args)
             /* dispatch NETDEV and NETAPI messages */
             switch (msg.type) {
                 case CONTIKIMAC_MSG_TYPE_RADIO_OFF:
-#if 0
-                    DEBUG("gnrc_contikimac(%d): Going to sleep\n", thread_getpid());
-                    res = dev->driver->set(dev, NETOPT_STATE, &state_sleep, sizeof(state_sleep));
-                    if (res < 0) {
-                        DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_SLEEP: %d\n",
-                            thread_getpid(), res);
-                        break;
-                    }
-#endif
+                    gnrc_contikimac_radio_sleep(dev);
                     break;
                 case CONTIKIMAC_MSG_TYPE_RX_BEGIN:
                 {
@@ -342,6 +363,7 @@ static void *_gnrc_contikimac_thread(void *args)
                         break;
                     }
                     bool found = 0;
+                    LED1_ON;
                     for (unsigned cca = CONTIKIMAC_CCA_COUNT_MAX; cca > 0; --cca) {
                         netopt_enable_t channel_clear;
                         res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
@@ -359,7 +381,7 @@ static void *_gnrc_contikimac_thread(void *args)
                     }
                     if (found) {
                         /* Set the radio to listen for incoming packets */
-                        LOG_ERROR("gnrc_contikimac(%d): Detected, listening\n", thread_getpid());
+                        DEBUG("gnrc_contikimac(%d): Detected, listening\n", thread_getpid());
                         res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
                         if (res < 0) {
                             LOG_ERROR("gnrc_contikimac(%d): Failed setting NETOPT_STATE_IDLE: %d\n",
@@ -372,13 +394,8 @@ static void *_gnrc_contikimac_thread(void *args)
                     }
                     else {
                         /* Nothing detected, immediately return to sleep */
-                        DEBUG("gnrc_contikimac(%d): Nothing, sleeping\n", thread_getpid());
-                        res = dev->driver->set(dev, NETOPT_STATE, &state_sleep, sizeof(state_sleep));
-                        if (res < 0) {
-                            LOG_ERROR("gnrc_contikimac(%d): Failed setting NETOPT_STATE_SLEEP: %d\n",
-                                thread_getpid(), res);
-                            break;
-                        }
+                        DEBUG("gnrc_contikimac(%d): Nothing seen\n", thread_getpid());
+                        gnrc_contikimac_radio_sleep(dev);
                     }
                     /* Schedule the next wake up */
                     xtimer_periodic_msg(&timer_channel_check, &last_channel_check,
@@ -393,6 +410,7 @@ static void *_gnrc_contikimac_thread(void *args)
                     break;
                 case GNRC_NETAPI_MSG_TYPE_SND:
                 {
+                    LED2_ON;
                     /* TODO set frame pending field in some circumstances */
                     /* TODO enqueue packets */
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_SND received\n",
@@ -404,6 +422,7 @@ static void *_gnrc_contikimac_thread(void *args)
                     gnrc_netdev->send(gnrc_netdev, pkt);
                     gnrc_contikimac_send(dev, pkt);
                     gnrc_pktbuf_release(pkt);
+                    LED2_OFF;
                     break;
                 }
                 case GNRC_NETAPI_MSG_TYPE_SET:
