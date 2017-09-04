@@ -23,7 +23,11 @@
 #include "board.h"
 #include "net/gnrc/netdev.h"
 #include "net/gnrc/netdev/ieee802154.h"
+#if MODULE_GNRC_CONTIKIMAC
+#include "net/gnrc/contikimac/contikimac.h"
+#elif MODULE_GNRC_LWMAC
 #include "net/gnrc/lwmac/lwmac.h"
+#endif
 #include "net/gnrc.h"
 
 #include "at86rf2xx.h"
@@ -59,7 +63,13 @@ void auto_init_at86rf2xx(void)
             LOG_ERROR("[auto_init_netif] error initializing at86rf2xx radio #%u\n", i);
         }
         else {
-#ifdef MODULE_GNRC_LWMAC
+#if MODULE_GNRC_CONTIKIMAC
+            gnrc_contikimac_init(_at86rf2xx_stacks[i],
+                            AT86RF2XX_MAC_STACKSIZE,
+                            AT86RF2XX_MAC_PRIO,
+                            "at86rf2xx-contikimac",
+                            &gnrc_adpt[i]);
+#elif MODULE_GNRC_LWMAC
             gnrc_lwmac_init(_at86rf2xx_stacks[i],
                             AT86RF2XX_MAC_STACKSIZE,
                             AT86RF2XX_MAC_PRIO,
