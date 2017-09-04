@@ -195,10 +195,10 @@ bool at86rf2xx_cca(at86rf2xx_t *dev)
     reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_CC_CCA);
     reg |= AT86RF2XX_PHY_CC_CCA_MASK__CCA_REQUEST;
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_CC_CCA, reg);
-    /* Spin for CCA done (8 symbols + 12 µs = 128 µs + 12 µs for O-QPSK)*/
+    /* Spin until done (8 symbols + 12 µs = 128 µs + 12 µs for O-QPSK)*/
     do {
-        reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_STATUS);
-    } while (reg & AT86RF2XX_TRX_STATUS_MASK__CCA_DONE);
+        reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
+    } while ((reg & AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE) == 0);
     /* return true if channel is clear */
     bool ret = !!(reg & AT86RF2XX_TRX_STATUS_MASK__CCA_STATUS);
     /* re-enable RX */
@@ -207,4 +207,35 @@ bool at86rf2xx_cca(at86rf2xx_t *dev)
     at86rf2xx_set_state(dev, AT86RF2XX_STATE_TRX_OFF);
     at86rf2xx_set_state(dev, old_state);
     return ret;
+}
+
+int8_t at86rf2xx_measure_ed(at86rf2xx_t *dev)
+{
+    uint8_t reg;
+    uint8_t old_state = at86rf2xx_set_state(dev, AT86RF2XX_STATE_TRX_OFF);
+    /* Disable RX path */
+    uint8_t rx_syn = at86rf2xx_reg_read(dev, AT86RF2XX_REG__RX_SYN);
+    reg = rx_syn | AT86RF2XX_RX_SYN__RX_PDT_DIS;
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__RX_SYN, reg);
+    /* Manually triggered ED is only possible in RX_ON (basic operating mode) */
+    at86rf2xx_set_state(dev, AT86RF2XX_STATE_RX_ON);
+    /* Perform ED measurement by writing an arbitrary value to PHY_ED_LEVEL */
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_ED_LEVEL, 123);
+    /* Spin until done (8 symbols + 12 µs = 128 µs + 12 µs for O-QPSK)*/
+    do {
+        reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
+    } while ((reg & AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE) == 0);
+    reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_ED_LEVEL);
+#if MODULE_AT86RF212B
+    /* AT86RF212B has different scale than the other variants */
+    int8_t ed = (int8_t)(((int16_t)reg * 103) / 100) + RSSI_BASE_VAL;
+#else
+    int8_t ed = (int8_t)reg + RSSI_BASE_VAL;
+#endif
+    /* re-enable RX */
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__RX_SYN, rx_syn);
+    /* Step back to the old state */
+    at86rf2xx_set_state(dev, AT86RF2XX_STATE_TRX_OFF);
+    at86rf2xx_set_state(dev, old_state);
+    return ed;
 }

@@ -372,15 +372,6 @@ int8_t at86rf2xx_get_cca_threshold(at86rf2xx_t *dev);
 void at86rf2xx_set_cca_threshold(at86rf2xx_t *dev, int8_t value);
 
 /**
- * @brief   Get the latest ED level measurement
- *
- * @param[in] dev           device to read value from
- *
- * @return                  the last ED level
- */
-int8_t at86rf2xx_get_ed_level(at86rf2xx_t *dev);
-
-/**
  * @brief   Enable or disable driver specific options
  *
  * @param[in] dev           device to set/clear option flag for
@@ -454,6 +445,15 @@ void at86rf2xx_tx_exec(at86rf2xx_t *dev);
  * @return                  false if channel is determined busy
  */
 bool at86rf2xx_cca(at86rf2xx_t *dev);
+
+/**
+ * @brief   Perform an ED level measurement
+ *
+ * @param[in] dev           device to use for the measurement
+ *
+ * @return                  the ED level, in dB
+ */
+int8_t at86rf2xx_measure_ed(at86rf2xx_t *dev);
 
 #ifdef __cplusplus
 }

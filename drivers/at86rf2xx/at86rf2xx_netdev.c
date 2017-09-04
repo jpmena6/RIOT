@@ -342,7 +342,7 @@ static int _get(netdev_t *netdev, netopt_t opt, void *val, size_t max_len)
 
         case NETOPT_LAST_ED_LEVEL:
             assert(max_len >= sizeof(int8_t));
-            *((int8_t *)val) = at86rf2xx_get_ed_level(dev);
+            *((int8_t *)val) = at86rf2xx_measure_ed(dev);
             res = sizeof(int8_t);
             break;
 
