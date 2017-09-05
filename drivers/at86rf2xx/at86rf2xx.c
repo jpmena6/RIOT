@@ -197,8 +197,8 @@ bool at86rf2xx_cca(at86rf2xx_t *dev)
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_CC_CCA, reg);
     /* Spin until done (8 symbols + 12 µs = 128 µs + 12 µs for O-QPSK)*/
     do {
-        reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
-    } while ((reg & AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE) == 0);
+        reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_STATUS);
+    } while ((reg & AT86RF2XX_TRX_STATUS_MASK__CCA_DONE) == 0);
     /* return true if channel is clear */
     bool ret = !!(reg & AT86RF2XX_TRX_STATUS_MASK__CCA_STATUS);
     /* re-enable RX */
