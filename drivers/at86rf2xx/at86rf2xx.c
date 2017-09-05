@@ -212,19 +212,30 @@ bool at86rf2xx_cca(at86rf2xx_t *dev)
 int8_t at86rf2xx_measure_ed(at86rf2xx_t *dev)
 {
     uint8_t reg;
+    /* mask all interrupts */
+    uint8_t old_mask = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, 0);
     uint8_t old_state = at86rf2xx_set_state(dev, AT86RF2XX_STATE_TRX_OFF);
     /* Disable RX path */
-    uint8_t rx_syn = at86rf2xx_reg_read(dev, AT86RF2XX_REG__RX_SYN);
-    reg = rx_syn | AT86RF2XX_RX_SYN__RX_PDT_DIS;
+    uint8_t old_rx_syn = at86rf2xx_reg_read(dev, AT86RF2XX_REG__RX_SYN);
+    reg = old_rx_syn | AT86RF2XX_RX_SYN__RX_PDT_DIS;
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__RX_SYN, reg);
+    /* let the IRQ flags be set without triggering the interrupt pin */
+    uint8_t old_ctrl1 = at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_CTRL_1);
+    reg = old_ctrl1 | AT86RF2XX_TRX_CTRL_1_MASK__IRQ_MASK_MODE;
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_CTRL_1, reg);
+    /* Discard all IRQ flags */
+    (void) at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
+
     /* Manually triggered ED is only possible in RX_ON (basic operating mode) */
     at86rf2xx_set_state(dev, AT86RF2XX_STATE_RX_ON);
     /* Perform ED measurement by writing an arbitrary value to PHY_ED_LEVEL */
-    at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_ED_LEVEL, 123);
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_ED_LEVEL, 0xff);
     /* Spin until done (8 symbols + 12 µs = 128 µs + 12 µs for O-QPSK)*/
     do {
         reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
     } while ((reg & AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE) == 0);
+    reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_ED_LEVEL);
     reg = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_ED_LEVEL);
 #if MODULE_AT86RF212B
     /* AT86RF212B has different scale than the other variants */
@@ -232,10 +243,16 @@ int8_t at86rf2xx_measure_ed(at86rf2xx_t *dev)
 #else
     int8_t ed = (int8_t)reg + RSSI_BASE_VAL;
 #endif
-    /* re-enable RX */
-    at86rf2xx_reg_write(dev, AT86RF2XX_REG__RX_SYN, rx_syn);
-    /* Step back to the old state */
+    /* Back to standby */
     at86rf2xx_set_state(dev, AT86RF2XX_STATE_TRX_OFF);
+    /* restore IRQ settings */
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_CTRL_1, old_ctrl1);
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, old_mask);
+    /* Discard all IRQ flags */
+    (void) at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
+    /* re-enable RX */
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__RX_SYN, old_rx_syn);
+    /* Step back to the old state */
     at86rf2xx_set_state(dev, old_state);
     return ed;
 }
