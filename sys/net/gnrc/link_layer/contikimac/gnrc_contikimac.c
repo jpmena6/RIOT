@@ -77,22 +77,11 @@
 #define CONTIKIMAC_THREAD_FLAG_TX_OK     (1 << 2)
 #define CONTIKIMAC_THREAD_FLAG_RX        (1 << 3)
 
-static void _pass_on_packet(gnrc_pktsnip_t *pkt);
+static const netopt_state_t state_standby = NETOPT_STATE_STANDBY;
+static const netopt_state_t state_listen  = NETOPT_STATE_IDLE;
+static const netopt_state_t state_tx      = NETOPT_STATE_TX;
 
-// static void _signal_tx_ok(void *arg)
-// {
-//     thread_flags_set(arg, CONTIKIMAC_THREAD_FLAG_TX_OK);
-// }
-//
-// static void _signal_tx_noack(void *arg)
-// {
-//     thread_flags_set(arg, CONTIKIMAC_THREAD_FLAG_TX_NOACK);
-// }
-//
-// static void _signal_rx(void *arg)
-// {
-//     thread_flags_set(arg, CONTIKIMAC_THREAD_FLAG_RX);
-// }
+static void _pass_on_packet(gnrc_pktsnip_t *pkt);
 
 /**
  * @brief   Function called by the device driver on device events
@@ -120,7 +109,7 @@ static void _event_cb(netdev_t *dev, netdev_event_t event)
                     }
                     msg_t msg = {.type = CONTIKIMAC_MSG_TYPE_RX_END};
                     if (msg_send(&msg, gnrc_netdev->pid) <= 0) {
-                        LOG_ERROR("gnrc_contikimac(%d): lost RX_END", thread_getpid());
+                        LOG_ERROR("gnrc_contikimac(%d): lost RX_END\n", thread_getpid());
                     }
 
                     break;
@@ -129,7 +118,7 @@ static void _event_cb(netdev_t *dev, netdev_event_t event)
                 {
                     msg_t msg = {.type = CONTIKIMAC_MSG_TYPE_RX_BEGIN};
                     if (msg_send(&msg, gnrc_netdev->pid) <= 0) {
-                        LOG_ERROR("gnrc_contikimac(%d): lost RX_BEGIN", thread_getpid());
+                        LOG_ERROR("gnrc_contikimac(%d): lost RX_BEGIN\n", thread_getpid());
                     }
                 }
             case NETDEV_EVENT_TX_MEDIUM_BUSY:
@@ -182,7 +171,6 @@ static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
 //             time_before = xtimer_now_usec();
             do_transmit = false;
             thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK);
-            static const netopt_state_t state_tx = NETOPT_STATE_TX;
             dev->driver->set(dev, NETOPT_STATE, &state_tx, sizeof(state_tx));
         }
         thread_flags_t txflags = thread_flags_wait_any(
@@ -228,7 +216,7 @@ void gnrc_contikimac_radio_sleep(netdev_t *dev)
         DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_SLEEP: %d\n",
               thread_getpid(), res);
     }
-    LED1_OFF;
+    LED0_OFF;
 }
 
 /**
@@ -296,11 +284,6 @@ static void *_gnrc_contikimac_thread(void *args)
         LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_RX_END_IRQ failed: %d\n",
                     thread_getpid(), res);
     }
-    res = dev->driver->set(dev, NETOPT_TX_START_IRQ, &enable, sizeof(enable));
-    if (res < 0) {
-        LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_TX_START_IRQ failed: %d\n",
-                    thread_getpid(), res);
-    }
     res = dev->driver->set(dev, NETOPT_TX_END_IRQ, &enable, sizeof(enable));
     if (res < 0) {
         LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_TX_END_IRQ failed: %d\n",
@@ -315,9 +298,6 @@ static void *_gnrc_contikimac_thread(void *args)
     }
 
     xtimer_ticks32_t last_channel_check = xtimer_now();
-
-    static const netopt_state_t state_standby = NETOPT_STATE_STANDBY;
-    static const netopt_state_t state_listen  = NETOPT_STATE_IDLE;
 
     /* start the event loop */
     while (1) {
@@ -363,7 +343,7 @@ static void *_gnrc_contikimac_thread(void *args)
                         break;
                     }
                     bool found = 0;
-                    LED1_ON;
+                    LED0_ON;
                     for (unsigned cca = CONTIKIMAC_CCA_COUNT_MAX; cca > 0; --cca) {
                         netopt_enable_t channel_clear;
                         res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
@@ -410,7 +390,6 @@ static void *_gnrc_contikimac_thread(void *args)
                     break;
                 case GNRC_NETAPI_MSG_TYPE_SND:
                 {
-                    LED2_ON;
                     /* TODO set frame pending field in some circumstances */
                     /* TODO enqueue packets */
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_SND received\n",
@@ -419,10 +398,35 @@ static void *_gnrc_contikimac_thread(void *args)
                     /* TODO cache the important info */
                     gnrc_pktsnip_t *pkt = msg.content.ptr;
                     gnrc_pktbuf_hold(pkt, 1);
+
+                    netopt_state_t old_state;
+                    int res = dev->driver->get(dev, NETOPT_STATE, &old_state, sizeof(old_state));
+                    if (res < 0) {
+                        DEBUG("gnrc_contikimac(%d): Failed getting NETOPT_STATE: %d\n",
+                              thread_getpid(), res);
+                    }
+                    /*
+                     * Go to standby before transmitting to avoid having incoming
+                     * packets corrupt the frame buffer on single buffered
+                     * transceivers (e.g. at86rf2xx). Also works around an issue
+                     * on at86rf2xx where the frame buffer is lost after the
+                     * first transmission because the driver puts the transceiver
+                     * in sleep mode.
+                     */
+                    res = dev->driver->set(dev, NETOPT_STATE, &state_standby, sizeof(state_standby));
+                    if (res < 0) {
+                        DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_STANDBY: %d\n",
+                              thread_getpid(), res);
+                    }
                     gnrc_netdev->send(gnrc_netdev, pkt);
                     gnrc_contikimac_send(dev, pkt);
+                    /* Restore old state */
+                    res = dev->driver->set(dev, NETOPT_STATE, &old_state, sizeof(old_state));
+                    if (res < 0) {
+                        DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE %u: %d\n",
+                              thread_getpid(), (unsigned)old_state, res);
+                    }
                     gnrc_pktbuf_release(pkt);
-                    LED2_OFF;
                     break;
                 }
                 case GNRC_NETAPI_MSG_TYPE_SET:
