@@ -39,29 +39,63 @@
 #endif
 
 /* TODO Move these parameters somewhere else */
+
+#ifndef CONTIKIMAC_CYCLE_TIME
+#ifndef CONTIKIMAC_CHANNEL_CHECK_RATE
 /* (Hz) frequency of channel checks */
 #define CONTIKIMAC_CHANNEL_CHECK_RATE 8
+#endif
 /* (usec) time between each wake period */
 #define CONTIKIMAC_CYCLE_TIME (1000000ul / CONTIKIMAC_CHANNEL_CHECK_RATE)
+#endif /* !defined(CONTIKIMAC_CYCLE_TIME) */
+
 /* Maximum number of CCA operations to perform during each wake cycle */
 #define CONTIKIMAC_CCA_COUNT_MAX (2u)
-/* These numbers are OK for IEEE 802.15.4 O-QPSK 250 kbit/s */
-/* (usec) Tc, time between each successive CCA */
-#define CONTIKIMAC_CCA_SLEEP_TIME (500u)
+
+/* The numbers below are OK for IEEE 802.15.4 O-QPSK 250 kbit/s */
+
+/* (usec) Tc, sleep time between each successive CCA */
+#define CONTIKIMAC_CCA_SLEEP_TIME (600u)
+
 /* (usec) Tr, time required for a single CCA check */
-/* depends on both radio hardware and software delays, add some margin to
- * account for variations in software implementations and hardware */
-#define CONTIKIMAC_CCA_CHECK_TIME (300u)
+/* The CCA check should take exactly 8 symbols (128us), but the transceiver will
+ * take some time to prepare for RX as well. */
+#define CONTIKIMAC_CCA_CHECK_TIME (192u)
+
+/* (usec) time for a complete CCA loop iteration */
+#define CONTIKIMAC_CCA_CYCLE_TIME (CONTIKIMAC_CCA_SLEEP_TIME + CONTIKIMAC_CCA_CHECK_TIME)
+
 /* (usec) Ti, time between successive retransmissions, must be less than Tc */
-#define CONTIKIMAC_INTER_PACKET_INTERVAL (400u)
+#define CONTIKIMAC_INTER_PACKET_INTERVAL (300u)
+
 /* (usec) maximum time to wait for the next packet in a burst */
 #define CONTIKIMAC_INTER_PACKET_DEADLINE (32000u)
+
 /* (usec) Maximum time to remain awake after a CCA detection */
 #define CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED (12500u)
+
 /* (usec) time for a complete channel check cycle with CONTIKIMAC_CCA_COUNT_MAX number of CCAs */
-#define CONTIKIMAC_CHECK_TIME (CONTIKIMAC_CCA_COUNT_MAX * (CONTIKIMAC_CCA_CHECK_TIME + CONTIKIMAC_CCA_SLEEP_TIME))
+#define CONTIKIMAC_TOTAL_CHECK_TIME ((CONTIKIMAC_CCA_COUNT_MAX) * (CONTIKIMAC_CCA_CYCLE_TIME))
+
 /* (usec) Maximum time to keep retransmitting the same packet before giving up */
-#define CONTIKIMAC_STROBE_TIME (CONTIKIMAC_CYCLE_TIME + 2 * CONTIKIMAC_CHECK_TIME)
+#define CONTIKIMAC_STROBE_TIME ((CONTIKIMAC_CYCLE_TIME) + 2 * (CONTIKIMAC_TOTAL_CHECK_TIME))
+
+/* (usec) time to wait for Ack packet after TX has completed,
+ * the standard specifies that the Ack will begin transmission exactly AIFS
+ * after the packet has been received.
+ * AIFS = macSifsPeriod = 12 symbols (for O-QPSK)
+ * The Ack is at least 5 bytes in length and has a normal SFD (5 bytes) and PHR
+ * (1 byte), which yields
+ * 11 * 2 symbols = 22 symbols which gives a total time of 34 symbols.
+ * The at86rf2xx has a hardware ack reception timeout of 54 symbols, other
+ * software sources seem to use this number as well.
+ */
+#define CONTIKIMAC_ACK_WAIT_TIME (54u * 16u)
+
+#define CONTIKIMAC_TX_TIME_PER_BYTE (2u * 16u)
+/* (usec) time it takes to transmit the start of frame delimiter (SFD) and PHY
+ * header (PHR) fields */
+#define CONTIKIMAC_TX_PREAMBLE_TIME (12u * 16u)
 
 /* Size of message queue */
 #define CONTIKIMAC_MSG_QUEUE_SIZE 8
@@ -74,8 +108,20 @@
 
 #define CONTIKIMAC_THREAD_FLAG_ISR       (1 << 0)
 #define CONTIKIMAC_THREAD_FLAG_TX_NOACK  (1 << 1)
-#define CONTIKIMAC_THREAD_FLAG_TX_OK     (1 << 2)
-#define CONTIKIMAC_THREAD_FLAG_RX        (1 << 3)
+#define CONTIKIMAC_THREAD_FLAG_TX_ERROR  (1 << 2)
+#define CONTIKIMAC_THREAD_FLAG_TX_OK     (1 << 3)
+#define CONTIKIMAC_THREAD_FLAG_RX_BEGIN  (1 << 4)
+#define CONTIKIMAC_THREAD_FLAG_RX_END    (1 << 5)
+
+typedef struct {
+    gnrc_netdev_t *gnrc_netdev;
+    xtimer_ticks32_t last_channel_check;
+    struct {
+        xtimer_t channel_check;
+        xtimer_t sleep;
+    } timers;
+    bool rx_in_progress;
+} contikimac_context_t;
 
 static const netopt_state_t state_standby = NETOPT_STATE_STANDBY;
 static const netopt_state_t state_listen  = NETOPT_STATE_IDLE;
@@ -111,7 +157,6 @@ static void _event_cb(netdev_t *dev, netdev_event_t event)
                     if (msg_send(&msg, gnrc_netdev->pid) <= 0) {
                         LOG_ERROR("gnrc_contikimac(%d): lost RX_END\n", thread_getpid());
                     }
-
                     break;
                 }
             case NETDEV_EVENT_RX_STARTED:
@@ -120,8 +165,14 @@ static void _event_cb(netdev_t *dev, netdev_event_t event)
                     if (msg_send(&msg, gnrc_netdev->pid) <= 0) {
                         LOG_ERROR("gnrc_contikimac(%d): lost RX_BEGIN\n", thread_getpid());
                     }
+                    break;
                 }
             case NETDEV_EVENT_TX_MEDIUM_BUSY:
+#ifdef MODULE_NETSTATS_L2
+                dev->stats.tx_failed++;
+#endif
+                thread_flags_set((thread_t *)thread_get(gnrc_netdev->pid), CONTIKIMAC_THREAD_FLAG_TX_ERROR);
+                break;
             case NETDEV_EVENT_TX_NOACK:
 #ifdef MODULE_NETSTATS_L2
                 dev->stats.tx_failed++;
@@ -162,45 +213,72 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt)
 static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
 {
     gnrc_netif_hdr_t *netif_hdr = pkt->data;
+    bool broadcast = ((netif_hdr->flags &
+        (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)));
 
     xtimer_ticks32_t tx_timeout = xtimer_ticks_from_usec(xtimer_now_usec() + CONTIKIMAC_STROBE_TIME);
     bool do_transmit = true;
-//     uint32_t time_before = 0;
+    uint32_t time_before = 0;
+    time_before = xtimer_now_usec();
+    xtimer_ticks32_t last_irq;
     do {
+        thread_flags_t txflags;
         if (do_transmit) {
 //             time_before = xtimer_now_usec();
+            uint32_t time_after = xtimer_now_usec();
+            LOG_ERROR("S: %lu\n", time_after - time_before);
             do_transmit = false;
-            thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK);
+            thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_NOACK |
+                               CONTIKIMAC_THREAD_FLAG_TX_ERROR |
+                               CONTIKIMAC_THREAD_FLAG_TX_OK);
+            time_before = xtimer_now_usec();
             dev->driver->set(dev, NETOPT_STATE, &state_tx, sizeof(state_tx));
-        }
-        thread_flags_t txflags = thread_flags_wait_any(
+         txflags = thread_flags_wait_any(
             CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK |
             CONTIKIMAC_THREAD_FLAG_ISR);
+        }
+        else{
+         txflags = thread_flags_wait_any(
+            CONTIKIMAC_THREAD_FLAG_TX_NOACK | CONTIKIMAC_THREAD_FLAG_TX_OK |
+            CONTIKIMAC_THREAD_FLAG_ISR);
+        }
         if (txflags & CONTIKIMAC_THREAD_FLAG_ISR) {
+            /* To get the wait timing right we will save the timestamp here.
+             * The time of the last IRQ before the TX_OK or TX_NOACK flag was
+             * set is used as an approximation of when the TX operation finished */
+            last_irq = xtimer_now();
             /* Let the driver handle the IRQ */
             dev->driver->isr(dev);
         }
-        if (txflags & CONTIKIMAC_THREAD_FLAG_TX_NOACK) {
-            /* retransmit */
-            do_transmit = true;
-        }
+        /* note: intentionally not an else if, the ISR flag may become set again
+         * by the driver after the TX_xxx flag has been set. */
         if (txflags & CONTIKIMAC_THREAD_FLAG_TX_OK) {
             /* For unicast, stop after receiving the first Ack */
-            if ((netif_hdr->flags &
-                (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) == 0) {
-//                 uint32_t time_after = xtimer_now_usec();
-//                 LOG_ERROR("O: %lu\n", time_after - time_before);
+            if (!broadcast) {
+                uint32_t time_after = xtimer_now_usec();
+                LOG_ERROR("O: %lu\n", time_after - time_before);
                 break;
             }
             /* For broadcast and multicast, always transmit for the full
              * duration of STROBE_TIME. */
             do_transmit = true;
-        }
-        if (do_transmit) {
             /* Wait for a short while before retransmitting */
-//             uint32_t time_after = xtimer_now_usec();
-//             LOG_ERROR("N: %lu\n", time_after - time_before);
-            xtimer_usleep(CONTIKIMAC_INTER_PACKET_INTERVAL);
+            xtimer_periodic_wakeup(&last_irq, CONTIKIMAC_INTER_PACKET_INTERVAL);
+        }
+        /* note: else if is intentional, only one of TX_OK, TX_NOACK, TX_ERROR
+         * should be handled, they all result in retransmissions, only the
+         * timing differs */
+        else if (txflags & CONTIKIMAC_THREAD_FLAG_TX_NOACK) {
+            /* retransmit */
+            do_transmit = true;
+            /* the Ack timeout has already passed since the actual TX
+             * completed, we need to subtract that time from the sleep interval */
+//             xtimer_periodic_wakeup(&last_irq, CONTIKIMAC_INTER_PACKET_INTERVAL - CONTIKIMAC_ACK_WAIT_TIME);
+        }
+        else if (txflags & CONTIKIMAC_THREAD_FLAG_TX_ERROR) {
+            /* Medium was busy or TX error */
+            do_transmit = true;
+            /* Skip wait on TX errors */
         }
         /* Keep retransmitting until STROBE_TIME has passed, or until we
          * receive an Ack. */
@@ -231,28 +309,32 @@ static void *_gnrc_contikimac_thread(void *args)
     DEBUG("gnrc_contikimac(%d): starting thread\n", thread_getpid());
 
     gnrc_netdev_t *gnrc_netdev = args;
+    contikimac_context_t ctx = {
+        .gnrc_netdev = gnrc_netdev,
+        .timers = {
+            .sleep = { .target = 0, .long_target = 0},
+            .channel_check = { .target = 0, .long_target = 0},
+        },
+    };
     netdev_t *dev = gnrc_netdev->dev;
 
     gnrc_netdev->pid = thread_getpid();
 
-    gnrc_netapi_opt_t *opt;
-    int res;
     msg_t msg, reply, msg_queue[CONTIKIMAC_MSG_QUEUE_SIZE];
+
+    msg_t msg_sleep = { .type = CONTIKIMAC_MSG_TYPE_RADIO_OFF };
+    msg_t msg_channel_check = { .type = CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK };
+
 
     /* setup the MAC layer's message queue */
     msg_init_queue(msg_queue, CONTIKIMAC_MSG_QUEUE_SIZE);
 
-    msg_t msg_sleep = { .type = CONTIKIMAC_MSG_TYPE_RADIO_OFF };
-    xtimer_t timer_sleep = { .target = 0, .long_target = 0};
-    msg_t msg_channel_check = { .type = CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK };
-    xtimer_t timer_channel_check = { .target = 0, .long_target = 0};
-
-    /* Initialize the radio duty cycling by passing an initial event */
-    msg_send(&msg_channel_check, thread_getpid());
-
     /* register the event callback with the device driver */
     dev->event_callback = _event_cb;
     dev->context = gnrc_netdev;
+
+    /* Initialize the radio duty cycling by passing an initial event */
+    msg_send(&msg_channel_check, thread_getpid());
 
     /* register the device to the network stack*/
     gnrc_netif_add(thread_getpid());
@@ -264,40 +346,44 @@ static void *_gnrc_contikimac_thread(void *args)
     static const netopt_enable_t enable = NETOPT_ENABLE;
     static const netopt_enable_t disable = NETOPT_DISABLE;
     static const uint8_t zero = 0;
-    res = dev->driver->set(dev, NETOPT_CSMA, &disable, sizeof(disable));
-    if (res < 0) {
-        LOG_ERROR("gnrc_contikimac(%d): disable NETOPT_CSMA failed: %d\n",
-                    thread_getpid(), res);
-    }
-    res = dev->driver->set(dev, NETOPT_RETRANS, &zero, sizeof(zero));
-    if (res < 0) {
-        LOG_ERROR("gnrc_contikimac(%d): disable NETOPT_RETRANS failed: %d\n",
-                    thread_getpid(), res);
-    }
-    res = dev->driver->set(dev, NETOPT_RX_START_IRQ, &enable, sizeof(enable));
-    if (res < 0) {
-        LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_RX_START_IRQ failed: %d\n",
-                    thread_getpid(), res);
-    }
-    res = dev->driver->set(dev, NETOPT_RX_END_IRQ, &enable, sizeof(enable));
-    if (res < 0) {
-        LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_RX_END_IRQ failed: %d\n",
-                    thread_getpid(), res);
-    }
-    res = dev->driver->set(dev, NETOPT_TX_END_IRQ, &enable, sizeof(enable));
-    if (res < 0) {
-        LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_TX_END_IRQ failed: %d\n",
-                    thread_getpid(), res);
-    }
-    res = dev->driver->set(dev, NETOPT_PRELOADING, &enable, sizeof(enable));
-    if (res < 0) {
-        LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_PRELOADING failed: %d\n",
-                    thread_getpid(), res);
-        LOG_ERROR("gnrc_contikimac requires NETOPT_PRELOADING, this node will "
-                  "likely not be able to communicate with other nodes!\n");
+
+    {
+        int res;
+        res = dev->driver->set(dev, NETOPT_CSMA, &disable, sizeof(disable));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): disable NETOPT_CSMA failed: %d\n",
+                      thread_getpid(), res);
+        }
+        res = dev->driver->set(dev, NETOPT_RETRANS, &zero, sizeof(zero));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): disable NETOPT_RETRANS failed: %d\n",
+                      thread_getpid(), res);
+        }
+        res = dev->driver->set(dev, NETOPT_RX_START_IRQ, &enable, sizeof(enable));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_RX_START_IRQ failed: %d\n",
+                      thread_getpid(), res);
+        }
+        res = dev->driver->set(dev, NETOPT_RX_END_IRQ, &enable, sizeof(enable));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_RX_END_IRQ failed: %d\n",
+                      thread_getpid(), res);
+        }
+        res = dev->driver->set(dev, NETOPT_TX_END_IRQ, &enable, sizeof(enable));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_TX_END_IRQ failed: %d\n",
+                      thread_getpid(), res);
+        }
+        res = dev->driver->set(dev, NETOPT_PRELOADING, &enable, sizeof(enable));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_PRELOADING failed: %d\n",
+                      thread_getpid(), res);
+            LOG_ERROR("gnrc_contikimac requires NETOPT_PRELOADING, this node will "
+            "likely not be able to communicate with other nodes!\n");
+        }
     }
 
-    xtimer_ticks32_t last_channel_check = xtimer_now();
+    ctx.last_channel_check = xtimer_now();
 
     /* start the event loop */
     while (1) {
@@ -315,20 +401,17 @@ static void *_gnrc_contikimac_thread(void *args)
                     gnrc_contikimac_radio_sleep(dev);
                     break;
                 case CONTIKIMAC_MSG_TYPE_RX_BEGIN:
-                {
                     /* postpone sleep */
-                    xtimer_set_msg(&timer_sleep, CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED,
-                                &msg_sleep, thread_getpid());
+                    xtimer_set_msg(&ctx.timers.sleep,
+                                   CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED,
+                                   &msg_sleep, thread_getpid());
                     break;
-                }
                 case CONTIKIMAC_MSG_TYPE_RX_END:
-                {
                     /* TODO process frame pending field */
                     /* postpone sleep */
-                    xtimer_set_msg(&timer_sleep, CONTIKIMAC_INTER_PACKET_DEADLINE,
+                    xtimer_set_msg(&ctx.timers.sleep, CONTIKIMAC_INTER_PACKET_DEADLINE,
                                 &msg_sleep, thread_getpid());
                     break;
-                }
                 case CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK:
                 {
                     DEBUG("gnrc_contikimac(%d): Checking channel\n", thread_getpid());
@@ -336,7 +419,7 @@ static void *_gnrc_contikimac_thread(void *args)
                     /* This operation will block the thread from other events (TX
                     * etc.) until we are done */
                     /* Turn on the radio */
-                    res = dev->driver->set(dev, NETOPT_STATE, &state_standby, sizeof(state_standby));
+                    int res = dev->driver->set(dev, NETOPT_STATE, &state_standby, sizeof(state_standby));
                     if (res < 0) {
                         LOG_ERROR("gnrc_contikimac(%d): Failed setting NETOPT_STATE_STANDBY: %d\n",
                             thread_getpid(), res);
@@ -369,7 +452,7 @@ static void *_gnrc_contikimac_thread(void *args)
                             break;
                         }
                         /* go back to sleep after some time if we don't see any packets */
-                        xtimer_set_msg(&timer_sleep, CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED,
+                        xtimer_set_msg(&ctx.timers.sleep, CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED,
                                     &msg_sleep, thread_getpid());
                     }
                     else {
@@ -378,7 +461,7 @@ static void *_gnrc_contikimac_thread(void *args)
                         gnrc_contikimac_radio_sleep(dev);
                     }
                     /* Schedule the next wake up */
-                    xtimer_periodic_msg(&timer_channel_check, &last_channel_check,
+                    xtimer_periodic_msg(&ctx.timers.channel_check, &ctx.last_channel_check,
                                         CONTIKIMAC_CYCLE_TIME,
                                         &msg_channel_check, thread_getpid());
                     break;
@@ -430,12 +513,13 @@ static void *_gnrc_contikimac_thread(void *args)
                     break;
                 }
                 case GNRC_NETAPI_MSG_TYPE_SET:
+                {
                     /* read incoming options */
-                    opt = msg.content.ptr;
+                    gnrc_netapi_opt_t *opt = msg.content.ptr;
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_SET received. opt=%s\n",
                         thread_getpid(), netopt2str(opt->opt));
                     /* set option for device driver */
-                    res = dev->driver->set(dev, opt->opt, opt->data, opt->data_len);
+                    int res = dev->driver->set(dev, opt->opt, opt->data, opt->data_len);
                     DEBUG("gnrc_contikimac(%d): response of netdev->set: %i\n",
                         thread_getpid(), res);
                     /* send reply to calling thread */
@@ -443,13 +527,15 @@ static void *_gnrc_contikimac_thread(void *args)
                     reply.content.value = (uint32_t)res;
                     msg_reply(&msg, &reply);
                     break;
+                }
                 case GNRC_NETAPI_MSG_TYPE_GET:
+                {
                     /* read incoming options */
-                    opt = msg.content.ptr;
+                    gnrc_netapi_opt_t *opt = msg.content.ptr;
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_GET received. opt=%s\n",
                         thread_getpid(), netopt2str(opt->opt));
                     /* get option from device driver */
-                    res = dev->driver->get(dev, opt->opt, opt->data, opt->data_len);
+                    int res = dev->driver->get(dev, opt->opt, opt->data, opt->data_len);
                     DEBUG("gnrc_contikimac(%d): response of netdev->get: %i\n",
                         thread_getpid(), res);
                     /* send reply to calling thread */
@@ -457,6 +543,7 @@ static void *_gnrc_contikimac_thread(void *args)
                     reply.content.value = (uint32_t)res;
                     msg_reply(&msg, &reply);
                     break;
+                }
                 default:
                     DEBUG("gnrc_contikimac(%d): Unknown command %" PRIu16 "\n",
                         thread_getpid(), msg.type);
