@@ -280,9 +280,7 @@ void at86rf2xx_set_csma_backoff_exp(at86rf2xx_t *dev, uint8_t min, uint8_t max)
     min = (min > max) ? max : min;
     DEBUG("[at86rf2xx] opt: Set min BE=%u, max BE=%u\n", min, max);
 
-    at86rf2xx_reg_write(dev,
-            AT86RF2XX_REG__CSMA_BE,
-            (max << 4) | (min));
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__CSMA_BE, (max << 4) | (min));
 }
 
 void at86rf2xx_set_csma_seed(at86rf2xx_t *dev, uint8_t entropy[2])
@@ -293,9 +291,7 @@ void at86rf2xx_set_csma_seed(at86rf2xx_t *dev, uint8_t entropy[2])
     }
     DEBUG("[at86rf2xx] opt: Set CSMA seed to 0x%x 0x%x\n", entropy[0], entropy[1]);
 
-    at86rf2xx_reg_write(dev,
-                           AT86RF2XX_REG__CSMA_SEED_0,
-                           entropy[0]);
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__CSMA_SEED_0, entropy[0]);
 
     uint8_t tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__CSMA_SEED_1);
     tmp &= ~(AT86RF2XX_CSMA_SEED_1__CSMA_SEED_1);
