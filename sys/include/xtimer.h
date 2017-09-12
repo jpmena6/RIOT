@@ -207,6 +207,27 @@ static inline void xtimer_spin(xtimer_ticks32_t ticks);
 static inline void xtimer_periodic_wakeup(xtimer_ticks32_t *last_wakeup, uint32_t period);
 
 /**
+ * @brief Trigger a callback at absolute time (@p last_wakeup + @p period)
+ *
+ * Functionally similar to xtimer_set, but the target time is computed in
+ * the same way as for xtimer_periodic_wakeup.
+ *
+ * This function can be used to create periodic triggers.
+ *
+ * If the result of (@p last_wakeup + @p period) would be in the past, the function
+ * sets @p last_wakeup to @p last_wakeup + @p period and sends the message
+ * immediately.
+ *
+ * @param[in] timer         timer struct to work with.
+ *                          Its xtimer_t::target and xtimer_t::long_target
+ *                          fields need to be initialized with 0 on first use.
+ * @param[in] last_wakeup   base time stamp for the wakeup
+ * @param[in] period        time in microseconds that will be added to last_wakeup
+ */
+static inline void xtimer_periodic(xtimer_t *timer,
+                                   xtimer_ticks32_t *last_wakeup, uint32_t period);
+
+/**
  * @brief Send a message at absolute time (@p last_wakeup + @p period)
  *
  * Functionally similar to xtimer_set_msg, but the target time is computed in

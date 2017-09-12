@@ -65,6 +65,7 @@ uint64_t _xtimer_now64(void);
 void _xtimer_set_absolute(xtimer_t *timer, uint32_t target, uint32_t now);
 void _xtimer_set64(xtimer_t *timer, uint32_t offset, uint32_t long_offset);
 void _xtimer_set(xtimer_t *timer, uint32_t offset);
+void _xtimer_periodic(xtimer_t *timer, uint32_t *last_wakeup, uint32_t period);
 void _xtimer_periodic_wakeup(uint32_t *last_wakeup, uint32_t period);
 void _xtimer_periodic_msg(xtimer_t *timer, uint32_t *last_wakeup, uint32_t period, msg_t *msg, kernel_pid_t target_pid);
 void _xtimer_set_msg(xtimer_t *timer, uint32_t offset, msg_t *msg, kernel_pid_t target_pid);
@@ -199,6 +200,12 @@ static inline void xtimer_periodic_msg(xtimer_t *timer,
                                        msg_t *msg, kernel_pid_t target_pid)
 {
     _xtimer_periodic_msg(timer, &last_wakeup->ticks32, _xtimer_ticks_from_usec(period), msg, target_pid);
+}
+
+static inline void xtimer_periodic(xtimer_t *timer,
+                                   xtimer_ticks32_t *last_wakeup, uint32_t period)
+{
+    _xtimer_periodic(timer, &last_wakeup->ticks32, _xtimer_ticks_from_usec(period));
 }
 
 static inline void xtimer_set_msg(xtimer_t *timer, uint32_t offset, msg_t *msg, kernel_pid_t target_pid)
