@@ -328,13 +328,14 @@ void gnrc_contikimac_tick(contikimac_context_t *ctx)
     else {
         if (ctx->cycle.periods > CONTIKIMAC_MAX_NONACTIVITY_PERIODS) {
             /* Fast sleep optimization */
-            LOG_ERROR("gnrc_contikimac(%d): Fast sleep (not mine)\n",
+            /* The radio energy detected by the CCA was not a packet directed to us */
+            LOG_ERROR("gnrc_contikimac(%d): Fast sleep (noise)\n",
                       thread_getpid());
             gnrc_contikimac_radio_sleep(dev);
             return;
         }
-        /* Performing a CCA check while a packet is being received may
-         * cause the driver to abort the reception */
+        /* Performing a CCA check while a packet is being received may cause the
+         * driver to abort the reception */
         netopt_enable_t channel_clear;
         int res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
         if (res < 0) {
@@ -353,9 +354,8 @@ void gnrc_contikimac_tick(contikimac_context_t *ctx)
     }
 //     LOG_ERROR("%u %u\n", ctx->cycle.periods, ctx->cycle.silence);
     if (ctx->cycle.silence > CONTIKIMAC_MAX_SILENT_PERIODS) {
-        /* Fast sleep optimization: Turn off the radio if the
-         * silence after the detection is longer than the
-         * retransmission interval */
+        /* Fast sleep optimization: Turn off the radio if the silence after the
+         * detection is longer than the retransmission interval */
         LOG_ERROR("gnrc_contikimac(%d): Fast sleep (silence)\n",
                   thread_getpid());
         gnrc_contikimac_radio_sleep(dev);
@@ -499,7 +499,11 @@ static void *_gnrc_contikimac_thread(void *args)
                 case CONTIKIMAC_MSG_TYPE_RX_END:
                     /* TODO process frame pending field */
                     ctx.rx_in_progress = false;
+                    /* We received a packet, stop checking the channel and go back to sleep */
                     LOG_ERROR("RXE\n");
+                    xtimer_remove(&ctx.timers.tick);
+                    thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
+                    gnrc_contikimac_radio_sleep(dev);
                     break;
                 case CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK:
                 {
@@ -548,7 +552,7 @@ static void *_gnrc_contikimac_thread(void *args)
                         /* TODO implement xtimer_add32 or sth */
                         ctx.listen_timeout = xtimer_ticks(ctx.last_tick.ticks32 +
                             xtimer_ticks_from_usec(CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED).ticks32);
-                        xtimer_periodic(&ctx.timers.tick, &ctx.last_tick, CONTIKIMAC_CCA_CYCLE_TIME);
+                        thread_flags_set((thread_t *)thread_get(thread_getpid()), CONTIKIMAC_THREAD_FLAG_TICK);
                         LOG_ERROR("T\n");
                     }
                     else {
