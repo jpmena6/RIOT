@@ -54,17 +54,7 @@
 
 /* The numbers below are OK for IEEE 802.15.4 O-QPSK 250 kbit/s */
 
-/* (usec) Tc, sleep time between each successive CCA */
-#define CONTIKIMAC_CCA_SLEEP_TIME (600u)
-
-/* (usec) Tr, time required for a single CCA check */
-/* The CCA check should take exactly 8 symbols (128us), but the transceiver will
- * take some time to prepare for RX as well. */
-#define CONTIKIMAC_CCA_CHECK_TIME (192u)
-
-/* (usec) time for a complete CCA loop iteration */
-#define CONTIKIMAC_CCA_CYCLE_TIME (CONTIKIMAC_CCA_SLEEP_TIME + CONTIKIMAC_CCA_CHECK_TIME)
-
+/* Fast sleep optimization parameters */
 /* Maximum number of silent CCA cycles while listening for incoming traffic
  * until the radio is turned off */
 #define CONTIKIMAC_MAX_SILENT_PERIODS 10
@@ -73,8 +63,50 @@
  * until the radio is turned off */
 #define CONTIKIMAC_MAX_NONACTIVITY_PERIODS 20
 
-/* (usec) Ti, time between successive retransmissions, must be less than Tc */
-#define CONTIKIMAC_INTER_PACKET_INTERVAL (900u)
+/* (usec) time to wait for Ack packet after TX has completed,
+ * the standard specifies that the Ack will begin transmission exactly AIFS
+ * after the packet has been received, in non beacon enabled networks. For
+ * beacon enabled networks, the transmission shall commence between AIFS and
+ * AIFS + aUnitBackoffPeriod from the reception of the last octet.
+ * Numeric values for O-QPSK 250 kbit/s
+ * AIFS = macSifsPeriod = 12 symbols
+ * aUnitBackoffPeriod = 20 symbols
+ * The Ack is 5 bytes in length and has a normal SFD (5 bytes) and PHR (1 byte),
+ * which yields
+ * 11 byte * 2 symbols/byte = 22 symbols
+ * In total, the Ack wait duration is 54 symbols for beacon enabled networks,
+ * and 34 otherwise. We simplify this to always use 54 symbols, since there are
+ * hardware transceivers which use this number as well (e.g. at86rf2xx).
+ */
+#define CONTIKIMAC_ACK_WAIT_TIME (54u * 16u)
+
+/* (usec) time to transmit a single byte */
+#define CONTIKIMAC_TX_TIME_PER_BYTE (2u * 16u)
+
+/* (usec) time it takes to transmit the start of frame delimiter (SFD) and PHY
+ * header (PHR) fields */
+#define CONTIKIMAC_TX_PREAMBLE_TIME (6 * CONTIKIMAC_TX_TIME_PER_BYTE)
+
+/* (usec) Ti, time between successive retransmissions, must be less than Tc, and
+ * greater than ACK_WAIT_TIME, or else we may start the retransmission before
+ * the Ack has been sent.
+ */
+#define CONTIKIMAC_INTER_PACKET_INTERVAL (CONTIKIMAC_ACK_WAIT_TIME)
+
+#if CONTIKIMAC_INTER_PACKET_INTERVAL < CONTIKIMAC_ACK_WAIT_TIME
+#error CONTIKIMAC_INTER_PACKET_INTERVAL too small, must be >= CONTIKIMAC_ACK_WAIT_TIME
+#endif
+
+/* (usec) Tc, sleep time between each successive CCA */
+#define CONTIKIMAC_CCA_SLEEP_TIME (CONTIKIMAC_INTER_PACKET_INTERVAL)
+
+/* (usec) Tr, time required for a single CCA check */
+/* The CCA check should take exactly 8 symbols (128us), but the transceiver will
+ * take some time to prepare for RX as well. */
+#define CONTIKIMAC_CCA_CHECK_TIME (256u)
+
+/* (usec) time for a complete CCA loop iteration */
+#define CONTIKIMAC_CCA_CYCLE_TIME (CONTIKIMAC_CCA_SLEEP_TIME + CONTIKIMAC_CCA_CHECK_TIME)
 
 /* (usec) maximum time to wait for the next packet in a burst */
 #define CONTIKIMAC_INTER_PACKET_DEADLINE (32000u)
@@ -88,32 +120,14 @@
 /* (usec) Maximum time to keep retransmitting the same packet before giving up */
 #define CONTIKIMAC_STROBE_TIME ((CONTIKIMAC_CYCLE_TIME) + 2 * (CONTIKIMAC_TOTAL_CHECK_TIME))
 
-/* (usec) time to wait for Ack packet after TX has completed,
- * the standard specifies that the Ack will begin transmission exactly AIFS
- * after the packet has been received.
- * AIFS = macSifsPeriod = 12 symbols (for O-QPSK)
- * The Ack is at least 5 bytes in length and has a normal SFD (5 bytes) and PHR
- * (1 byte), which yields
- * 11 * 2 symbols = 22 symbols which gives a total time of 34 symbols.
- * The at86rf2xx has a hardware ack reception timeout of 54 symbols, other
- * software sources seem to use this number as well.
- */
-#define CONTIKIMAC_ACK_WAIT_TIME (54u * 16u)
-
-#if CONTIKIMAC_INTER_PACKET_INTERVAL < CONTIKIMAC_ACK_WAIT_TIME
-#error CONTIKIMAC_INTER_PACKET_INTERVAL too small, must be >= CONTIKIMAC_ACK_WAIT_TIME
-#endif
-
-#define CONTIKIMAC_TX_TIME_PER_BYTE (2u * 16u)
-/* (usec) time it takes to transmit the start of frame delimiter (SFD) and PHY
- * header (PHR) fields */
-#define CONTIKIMAC_TX_PREAMBLE_TIME (12u * 16u)
+/* (usec) This is a small interval which is a lower limit on when to use xtimer
+ * calls to trigger periodic events. */
+#define SMALL_INTERVAL (CONTIKIMAC_TX_PREAMBLE_TIME / 2)
 
 /* Size of message queue */
 #define CONTIKIMAC_MSG_QUEUE_SIZE 8
 
 /* Some internal message types */
-// #define CONTIKIMAC_MSG_TYPE_RADIO_OFF      0xC000
 #define CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK  0xC001
 #define CONTIKIMAC_MSG_TYPE_RX_BEGIN       0xC002
 #define CONTIKIMAC_MSG_TYPE_RX_END         0xC003
@@ -144,6 +158,9 @@ static const netopt_state_t state_standby = NETOPT_STATE_STANDBY;
 static const netopt_state_t state_listen  = NETOPT_STATE_IDLE;
 static const netopt_state_t state_tx      = NETOPT_STATE_TX;
 
+/**
+ * @brief Internal helper used for passing the received packets to the next layer
+ */
 static void _pass_on_packet(gnrc_pktsnip_t *pkt);
 
 /**
@@ -151,6 +168,37 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt);
  *
  * @param[in] event     type of event
  */
+static void _event_cb(netdev_t *dev, netdev_event_t event);
+
+/**
+ * @brief Put the radio to sleep
+ */
+static void gnrc_contikimac_radio_sleep(netdev_t *dev);
+
+/**
+ * @brief  Transmit a packet until timeout or an Ack has been received
+ *
+ * @pre Packet data has been preloaded
+ *
+ * @param[in]  dev  network device
+ */
+static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt);
+
+/**
+ * @brief Periodic handler during wake times to determine when to go back to sleep
+ */
+static void gnrc_contikimac_tick(contikimac_context_t *ctx);
+
+/**
+ * @brief Set all network interface options that ContikiMAC uses
+ */
+static void setup_netdev(netdev_t *dev);
+
+/**
+ * @brief xtimer callback for setting a thread flag
+ */
+static void cb_set_tick_flag(void *arg);
+
 static void _event_cb(netdev_t *dev, netdev_event_t event)
 {
     gnrc_netdev_t *gnrc_netdev = dev->context;
@@ -220,10 +268,7 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt)
     }
 }
 
-/**
- * @brief Put the radio to sleep
- */
-void gnrc_contikimac_radio_sleep(netdev_t *dev)
+static void gnrc_contikimac_radio_sleep(netdev_t *dev)
 {
     static const netopt_state_t state_sleep = NETOPT_STATE_SLEEP;
     DEBUG("gnrc_contikimac(%d): Going to sleep\n", thread_getpid());
@@ -235,13 +280,6 @@ void gnrc_contikimac_radio_sleep(netdev_t *dev)
     LED0_OFF;
 }
 
-/**
- * @brief  Transmit a packet until timeout or an Ack has been received
- *
- * @pre Packet data has been preloaded
- *
- * @param[in]  dev  network device
- */
 static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
 {
     gnrc_netif_hdr_t *netif_hdr = pkt->data;
@@ -300,9 +338,13 @@ static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
         else if (txflags & CONTIKIMAC_THREAD_FLAG_TX_NOACK) {
             /* retransmit */
             do_transmit = true;
-            /* the Ack timeout has already passed since the actual TX
-             * completed, we need to subtract that time from the sleep interval */
-            xtimer_periodic_wakeup(&last_irq, CONTIKIMAC_INTER_PACKET_INTERVAL - CONTIKIMAC_ACK_WAIT_TIME);
+            /* Constant comparison is deliberate, let the compiler optimize this away */
+            if ((CONTIKIMAC_INTER_PACKET_INTERVAL - CONTIKIMAC_ACK_WAIT_TIME) > SMALL_INTERVAL) {
+                /* the Ack timeout has already passed since the actual TX
+                 * completed, we need to subtract that time from the sleep interval */
+                xtimer_periodic_wakeup(&last_irq, CONTIKIMAC_INTER_PACKET_INTERVAL - CONTIKIMAC_ACK_WAIT_TIME);
+            }
+            /* else: consider the time already passed without calling xtimer to verify */
         }
         else if (txflags & CONTIKIMAC_THREAD_FLAG_TX_ERROR) {
             /* Medium was busy or TX error */
@@ -314,10 +356,7 @@ static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
     } while(xtimer_less(xtimer_now(), tx_timeout));
 }
 
-/**
- * @brief Periodic handler during wake times to determine when to go back to sleep
- */
-void gnrc_contikimac_tick(contikimac_context_t *ctx)
+static void gnrc_contikimac_tick(contikimac_context_t *ctx)
 {
     netdev_t *dev = ctx->gnrc_netdev->dev;
     /* Periodically perform CCA checks to evaluate channel usage */
@@ -368,9 +407,6 @@ void gnrc_contikimac_tick(contikimac_context_t *ctx)
     xtimer_periodic(&ctx->timers.tick, &ctx->last_tick, CONTIKIMAC_CCA_CYCLE_TIME);
 }
 
-/**
- * @brief Set all options that ContikiMAC uses
- */
 static void setup_netdev(netdev_t *dev)
 {
     /* Enable RX- and TX-started interrupts */
@@ -413,9 +449,6 @@ static void setup_netdev(netdev_t *dev)
     }
 }
 
-/**
- * @brief xtimer callback for setting a thread flag
- */
 static void cb_set_tick_flag(void *arg)
 {
     thread_t *thread = arg;
@@ -553,7 +586,7 @@ static void *_gnrc_contikimac_thread(void *args)
                         ctx.listen_timeout = xtimer_ticks(ctx.last_tick.ticks32 +
                             xtimer_ticks_from_usec(CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED).ticks32);
                         thread_flags_set((thread_t *)thread_get(thread_getpid()), CONTIKIMAC_THREAD_FLAG_TICK);
-                        LOG_ERROR("T\n");
+                        LOG_ERROR("D\n");
                     }
                     else {
                         /* Nothing detected, immediately return to sleep */
