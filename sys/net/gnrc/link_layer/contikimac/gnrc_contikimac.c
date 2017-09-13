@@ -40,6 +40,11 @@
 
 /* TODO Move these parameters somewhere else */
 
+/* References:
+ * [dunkels11] Dunkels, A. (2011). The contikimac radio duty cycling protocol.
+ *     http://soda.swedish-ict.se/5128/1/contikimac-report.pdf
+ */
+
 #ifndef CONTIKIMAC_CYCLE_TIME
 #ifndef CONTIKIMAC_CHANNEL_CHECK_RATE
 /* (Hz) frequency of channel checks */
@@ -63,11 +68,16 @@
  * until the radio is turned off */
 #define CONTIKIMAC_MAX_NONACTIVITY_PERIODS 20
 
-/* (usec) time to wait for Ack packet after TX has completed,
- * the standard specifies that the Ack will begin transmission exactly AIFS
- * after the packet has been received, in non beacon enabled networks. For
- * beacon enabled networks, the transmission shall commence between AIFS and
- * AIFS + aUnitBackoffPeriod from the reception of the last octet.
+/* (usec) Ta+Td, time to wait for Ack packet after TX has completed.
+ * The IEEE 802.15.4 standard specifies that the Ack will begin transmission
+ * exactly AIFS after the packet has been received in non beacon enabled
+ * networks. For beacon enabled networks, the transmission shall commence
+ * between AIFS and AIFS + aUnitBackoffPeriod from the reception of the last
+ * octet. This time interval is called Ta in [dunkels11].
+ * The reception time of the Ack packet is called Td. We specify them summed
+ * together because for our timing purposes we only need the total time from
+ * transmission end to when we will time out waiting for the Ack.
+ *
  * Numeric values for O-QPSK 250 kbit/s
  * AIFS = macSifsPeriod = 12 symbols
  * aUnitBackoffPeriod = 20 symbols
@@ -76,7 +86,7 @@
  * 11 byte * 2 symbols/byte = 22 symbols
  * In total, the Ack wait duration is 54 symbols for beacon enabled networks,
  * and 34 otherwise. We simplify this to always use 54 symbols, since there are
- * hardware transceivers which use this number as well (e.g. at86rf2xx).
+ * hardware transceivers which have a fixed timeout of 54 symbols (e.g. at86rf2xx).
  */
 #define CONTIKIMAC_ACK_WAIT_TIME (54u * 16u)
 
@@ -109,10 +119,11 @@
 #define CONTIKIMAC_CCA_CYCLE_TIME (CONTIKIMAC_CCA_SLEEP_TIME + CONTIKIMAC_CCA_CHECK_TIME)
 
 /* (usec) maximum time to wait for the next packet in a burst */
+/* TODO implement burst reception */
 #define CONTIKIMAC_INTER_PACKET_DEADLINE (32000u)
 
 /* (usec) Maximum time to remain awake after a CCA detection */
-#define CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED (25000u)
+#define CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED (12500u)
 
 /* (usec) time for a complete channel check cycle with CONTIKIMAC_CCA_COUNT_MAX number of CCAs */
 #define CONTIKIMAC_TOTAL_CHECK_TIME ((CONTIKIMAC_CCA_COUNT_MAX) * (CONTIKIMAC_CCA_CYCLE_TIME))
@@ -121,7 +132,8 @@
 #define CONTIKIMAC_STROBE_TIME ((CONTIKIMAC_CYCLE_TIME) + 2 * (CONTIKIMAC_TOTAL_CHECK_TIME))
 
 /* (usec) This is a small interval which is a lower limit on when to use xtimer
- * calls to trigger periodic events. */
+ * calls to trigger periodic events. If a period is less than this time then we
+ * approximate it to 0 in some parts of the implementation */
 #define SMALL_INTERVAL (CONTIKIMAC_TX_PREAMBLE_TIME / 2)
 
 /* Size of message queue */
@@ -132,12 +144,21 @@
 #define CONTIKIMAC_MSG_TYPE_RX_BEGIN       0xC002
 #define CONTIKIMAC_MSG_TYPE_RX_END         0xC003
 
+/* Some thread flags which are used to handle events */
+/* Check these definitions for collisions in case the network device driver uses
+ * thread flags as well */
 #define CONTIKIMAC_THREAD_FLAG_ISR       (1 << 0)
 #define CONTIKIMAC_THREAD_FLAG_TICK      (1 << 1)
 #define CONTIKIMAC_THREAD_FLAG_TX_NOACK  (1 << 2)
 #define CONTIKIMAC_THREAD_FLAG_TX_ERROR  (1 << 3)
 #define CONTIKIMAC_THREAD_FLAG_TX_OK     (1 << 4)
 
+/**
+ * @brief Context information about the state of the MAC layer
+ *
+ * Context will be stack allocated inside the thread to avoid polluting the
+ * public netdev_t definitions with ContikiMAC specific variables.
+ */
 typedef struct {
     gnrc_netdev_t *gnrc_netdev;
     xtimer_ticks32_t last_channel_check;
@@ -154,6 +175,8 @@ typedef struct {
     bool rx_in_progress;
 } contikimac_context_t;
 
+/* Internal constants used for the netdev set NETOPT_STATE calls, as it requires
+ * a pointer to the value as argument */
 static const netopt_state_t state_standby = NETOPT_STATE_STANDBY;
 static const netopt_state_t state_listen  = NETOPT_STATE_IDLE;
 static const netopt_state_t state_tx      = NETOPT_STATE_TX;
@@ -171,7 +194,7 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt);
 static void _event_cb(netdev_t *dev, netdev_event_t event);
 
 /**
- * @brief Put the radio to sleep
+ * @brief Put the radio to sleep immediately
  */
 static void gnrc_contikimac_radio_sleep(netdev_t *dev);
 
