@@ -11,8 +11,8 @@
  * @ingroup     net_gnrc
  * @brief       Duty cycling MAC protocol for low power communication over IEEE 802.15.4 networks
  *
- * @see http://dunkels.com/adam/dunkels11contikimac.pdf
- * @see https://arxiv.org/abs/1404.3589
+ * @see Dunkels, A. (2011). The contikimac radio duty cycling protocol. http://soda.swedish-ict.se/5128/1/contikimac-report.pdf
+ * @see Michel, M., & Quoitin, B. (2014). Technical report: ContikiMAC vs X-MAC performance analysis. arXiv preprint arXiv:1404.3589. https://arxiv.org/abs/1404.3589
  *
  * @todo Write proper description
  *
