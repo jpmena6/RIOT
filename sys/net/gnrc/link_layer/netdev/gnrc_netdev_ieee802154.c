@@ -92,6 +92,14 @@ static gnrc_pktsnip_t *_recv(gnrc_netdev_t *gnrc_netdev)
 #if ENABLE_DEBUG
             char src_str[GNRC_NETIF_HDR_L2ADDR_PRINT_LEN];
 #endif
+            uint8_t seq = ieee802154_get_seq(pkt->data);
+            static uint8_t last_seq = 0;
+            if (seq == last_seq) {
+                DEBUG("_recv_ieee802154: Drop duplicate frame\n");
+                gnrc_pktbuf_release(pkt);
+                return NULL;
+            }
+            last_seq = seq;
             size_t mhr_len = ieee802154_get_frame_hdr_len(pkt->data);
 
             if (mhr_len == 0) {
