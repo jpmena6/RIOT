@@ -96,26 +96,26 @@
  * support the options used by the implementation. The options required for full
  * functionality are:
  *
- * - NETOPT_PRELOADING, for loading the TX frame once and transmitting many times
- * - NETOPT_STATE_TX, for triggering retransmission
- * - NETOPT_STATE_STANDBY, for radio low power CCA checking
- * - NETOPT_STATE_SLEEP, for radio low power mode
- * - NETOPT_STATE_IDLE, for radio RX listen
- * - NETOPT_CSMA, to disable hardware CSMA, not required if the radio does not perform CSMA
- * - NETOPT_RETRANS, to disable automatic retransmissions)
- * - NETOPT_TX_END_IRQ, to be alerted about end of TX)
- * - NETOPT_RX_START_IRQ, to be alerted about incoming frames)
- * - NETOPT_RX_END_IRQ, to be alerted about incoming frames)
- * - NETOPT_IS_CHANNEL_CLR, for performing CCA checks
+ * - @c NETOPT_PRELOADING, for loading the TX frame once and transmitting many times
+ * - @c NETOPT_STATE_TX, for triggering retransmission
+ * - @c NETOPT_STATE_STANDBY, for radio low power CCA checking
+ * - @c NETOPT_STATE_SLEEP, for radio low power mode
+ * - @c NETOPT_STATE_IDLE, for radio RX listen
+ * - @c NETOPT_CSMA, to disable hardware CSMA, not required if the radio does not perform CSMA
+ * - @c NETOPT_RETRANS, to disable automatic retransmissions)
+ * - @c NETOPT_TX_END_IRQ, to be alerted about end of TX)
+ * - @c NETOPT_RX_START_IRQ, to be alerted about incoming frames)
+ * - @c NETOPT_RX_END_IRQ, to be alerted about incoming frames)
+ * - @c NETOPT_IS_CHANNEL_CLR, for performing CCA checks
  *
  * Additionally, the radio must allow the same frame to be transmitted multiple
  * times. The implementation will switch the radio to standby before any TX
  * preloading, to avoid corrupting the TX buffer with incoming RX packets on
  * single buffered devices, e.g. at86rf2xx. The device driver must allow
- * multiple calls to NETOPT_STATE_TX after a single preload, for retransmissions
+ * multiple calls to @c NETOPT_STATE_TX after a single preload, for retransmissions
  * while strobing.
- * NETOPT_IS_CHANNEL_CLR, netdev->send(), and NETOPT_STATE_TX are called while
- * the radio is in NETOPT_STATE_STANDBY.
+ * @c NETOPT_IS_CHANNEL_CLR, @c netdev_driver::send(), and @c NETOPT_STATE_TX are called while
+ * the radio is in @c NETOPT_STATE_STANDBY.
  *
  * ## Fast sleep
  *
@@ -185,11 +185,13 @@
  *
  * ## Fast sleep
  *
- * For fast sleep, some additional timing information is needed.
+ * For fast sleep, some additional timing information is needed. \f$T_l\f$, the
+ * time to transmit the longest possible frame is a lower limit for timeouts in
+ * the fast sleep optimization.
  *
- *
- *
- * \f[\f]
+ * The interval between CCA checks during the fast sleep silence detection must
+ * be less than \f$T_i\f$ in order to be able to reliably sample the silence
+ * between two transmissions.
  *
  * ## Timing parameters for O-QPSK 250 kbit/s
  *
@@ -212,6 +214,11 @@
  *
  * Specified by the standard (4 bits per symbol)
  *
+ * \f[T_l = T_b \cdot (5 + 1 + 127) = 4320~\mathrm{\mu{}s}\f]
+ *
+ * The longest possible payload is 127 bytes, SFD+preamble is 5 bytes, PHR is 1
+ * byte.
+ *
  * Additionally, the hardware may have some timing constraints as well. For
  * example, the at86rf2xx transceiver has a fixed Ack timeout (when using
  * hardware Ack reception) of 54 symbols (\f$864~\mathrm{\mu{}s}\f$), this means
@@ -230,18 +237,13 @@
  * constants that must be configured manually for a minimum working configuration
  * are:
  *
- * - \f$n_s\f$, minimum allowed frame size
- * - \f$T_a + T_d\f$, Ack wait timeout
- * - \f$T_c\f$, the time between consecutive CCA checks
- * - \f$T_w\f$, the time between wake ups
- *
- * ## Derived parameters
- *
- * The parameters below can be derived from the parameters manually configured
- * in the previous section.
- *
- * - \f$n_c\f$, the maximum number of CCA checks in each wake up
- * - \f$T_l\f$, the transmission time for the longest possible packet
+ * - @c cca_count_max =\f$n_c\f$, the maximum number of CCA checks in each wake up
+ * - @c inter_packet_interval =\f$T_i\f$, interval between retransmissions
+ * - @c cca_cycle_period =\f$T_c\f$, the time between consecutive CCA checks
+ * - @c channel_check_period =\f$T_w\f$, the time between wake ups
+ * - @c after_ed_scan_timeout >\f$T_l\f$, time to keep checking for silence after detecting energy
+ * - @c after_ed_scan_interval <\f$T_i\f$, interval between CCA checks after detecting energy
+ * - @c rx_timeout =\f$T_l\f$, time to transmit the longest possible frame
  *
  * @{
  *
@@ -260,6 +262,80 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
+/**
+ * @brief ContikiMAC configuration parameters
+ */
+typedef struct {
+    /**
+     * @brief (usec) time between wake ups
+     *
+     * This is the interval between periodic wake ups for checking the channel
+     * for energy.
+     */
+    uint32_t channel_check_period;
+    /**
+     * @brief (usec) time between successive CCA checks during wake ups
+     *
+     * This setting, together with cca_count_max, defines the detection
+     * window for incoming traffic
+     */
+    uint32_t cca_cycle_period;
+    /**
+     * @brief (usec) interval to wait between each TX packet while strobing
+     *
+     * This time counts from when the end of TX is signalled from the device
+     * driver.
+     *
+     * \note This interval must be long enough to allow an Ack packet to arrive
+     * after transmitting.
+     */
+    uint32_t inter_packet_interval;
+#if 0
+    /**
+     * @brief (usec) maximum time to strobe a TX packet
+     *
+     * For unicast, this is the maximum time to keep retransmitting before
+     * giving up. Strobing will stop earlier if an Ack packet arrives before
+     * this time has passed.
+     *
+     * For broadcast/multicast, each packet will always be retransmitted until
+     * this time has passed.
+     */
+    uint32_t strobe_time;
+#endif
+    /**
+     * @brief (usec) maximum time to scan for channel idle after an energy detection
+     *
+     * Fast sleep optimization: After energy has been detected on the channel,
+     * the MAC layer will keep scanning the channel until it sees some silence.
+     *
+     * For reliable communication, this must at least as long as the time it
+     * takes to transmit the longest possible frame.
+     */
+    uint32_t after_ed_scan_timeout;
+    /**
+     * @brief (usec) interval between successive CCA checks after an energy detection
+     */
+    uint32_t after_ed_scan_interval;
+    /**
+     * @brief (usec) time to wait after an RX begin event before turning off the
+     * radio
+     *
+     * For reliable communication, this must at least as long as the time it
+     * takes to transmit the longest possible frame.
+     */
+    uint32_t rx_timeout;
+    /**
+     * @brief Maximum number of times to perform CCA checks during a wake up
+     * window
+     *
+     * This setting, together with cca_cycle_period, defines the detection
+     * window for incoming traffic
+     */
+    uint8_t cca_count_max;
+} contikimac_params_t;
 
 /**
  * @brief Initialize a network interface with ContikiMAC
