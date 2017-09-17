@@ -27,6 +27,7 @@
 #include "net/gnrc/nettype.h"
 #include "net/netdev.h"
 
+#include "net/gnrc/contikimac/contikimac.h"
 #include "net/gnrc/netdev.h"
 
 #include "log.h"
@@ -55,18 +56,24 @@
 #endif /* !defined(CONTIKIMAC_CYCLE_TIME) */
 
 /* Maximum number of CCA operations to perform during each wake cycle */
-#define CONTIKIMAC_CCA_COUNT_MAX (2u)
+/* The minimum setting for reliable communication is 2. Settings > 2
+ * relaxes the requirements on shortest possible packet. */
+#define CONTIKIMAC_CCA_COUNT_MAX (3u)
+
+#if CONTIKIMAC_CCA_COUNT_MAX < 2
+#warning CONTIKIMAC_CCA_COUNT_MAX must be >= 2 for reliable communication
+#endif
 
 /* The numbers below are OK for IEEE 802.15.4 O-QPSK 250 kbit/s */
 
 /* Fast sleep optimization parameters */
 /* Maximum number of silent CCA cycles while listening for incoming traffic
  * until the radio is turned off */
-#define CONTIKIMAC_MAX_SILENT_PERIODS 10
+#define CONTIKIMAC_MAX_SILENT_PERIODS 5
 
 /* Maximum number of CCA cycles while listening for incoming traffic
  * until the radio is turned off */
-#define CONTIKIMAC_MAX_NONACTIVITY_PERIODS 20
+#define CONTIKIMAC_MAX_NONACTIVITY_PERIODS 10
 
 /* (usec) Ta+Td, time to wait for Ack packet after TX has completed.
  * The IEEE 802.15.4 standard specifies that the Ack will begin transmission
@@ -108,7 +115,7 @@
 #endif
 
 /* (usec) Tc, sleep time between each successive CCA */
-#define CONTIKIMAC_CCA_SLEEP_TIME (CONTIKIMAC_INTER_PACKET_INTERVAL)
+#define CONTIKIMAC_CCA_SLEEP_TIME (CONTIKIMAC_INTER_PACKET_INTERVAL / (CONTIKIMAC_CCA_COUNT_MAX - 1))
 
 /* (usec) Tr, time required for a single CCA check */
 /* The CCA check should take exactly 8 symbols (128us), but the transceiver will
@@ -126,7 +133,7 @@
 #define CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED (12500u)
 
 /* (usec) time for a complete channel check cycle with CONTIKIMAC_CCA_COUNT_MAX number of CCAs */
-#define CONTIKIMAC_TOTAL_CHECK_TIME ((CONTIKIMAC_CCA_COUNT_MAX) * (CONTIKIMAC_CCA_CYCLE_TIME))
+#define CONTIKIMAC_TOTAL_CHECK_TIME (((CONTIKIMAC_CCA_COUNT_MAX) - 1) * (CONTIKIMAC_CCA_CYCLE_TIME) + (CONTIKIMAC_CCA_CHECK_TIME))
 
 /* (usec) Maximum time to keep retransmitting the same packet before giving up */
 #define CONTIKIMAC_STROBE_TIME ((CONTIKIMAC_CYCLE_TIME) + 2 * (CONTIKIMAC_TOTAL_CHECK_TIME))
@@ -161,19 +168,28 @@
  */
 typedef struct {
     gnrc_netdev_t *gnrc_netdev;
+    const contikimac_params_t *params;
+    thread_t *thread;
     xtimer_ticks32_t last_channel_check;
     xtimer_ticks32_t last_tick;
-    xtimer_ticks32_t listen_timeout;
     struct {
         xtimer_t channel_check;
         xtimer_t tick;
+        xtimer_t timeout;
     } timers;
-    struct {
-        unsigned periods;
-        unsigned silence;
-    } cycle;
+    bool seen_silence;
     bool rx_in_progress;
+    bool timeout_flag;
 } contikimac_context_t;
+
+/**
+ * @brief Helper struct for passing more than one argument to the thread from
+ * the init function
+ */
+struct thread_args {
+    gnrc_netdev_t *gnrc_netdev;
+    const contikimac_params_t *params;
+};
 
 /* Internal constants used for the netdev set NETOPT_STATE calls, as it requires
  * a pointer to the value as argument */
@@ -205,7 +221,7 @@ static void gnrc_contikimac_radio_sleep(netdev_t *dev);
  *
  * @param[in]  dev  network device
  */
-static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt);
+static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt);
 
 /**
  * @brief Periodic handler during wake times to determine when to go back to sleep
@@ -221,6 +237,11 @@ static void setup_netdev(netdev_t *dev);
  * @brief xtimer callback for setting a thread flag
  */
 static void cb_set_tick_flag(void *arg);
+
+/**
+ * @brief xtimer callback for timeouts during fast sleep
+ */
+static void cb_timeout(void *arg);
 
 static void _event_cb(netdev_t *dev, netdev_event_t event)
 {
@@ -303,8 +324,9 @@ static void gnrc_contikimac_radio_sleep(netdev_t *dev)
     LED0_OFF;
 }
 
-static void gnrc_contikimac_send(netdev_t *dev, gnrc_pktsnip_t *pkt)
+static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
 {
+    netdev_t *dev = ctx->gnrc_netdev->dev;
     gnrc_netif_hdr_t *netif_hdr = pkt->data;
     bool broadcast = ((netif_hdr->flags &
         (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)));
@@ -383,21 +405,40 @@ static void gnrc_contikimac_tick(contikimac_context_t *ctx)
 {
     netdev_t *dev = ctx->gnrc_netdev->dev;
     /* Periodically perform CCA checks to evaluate channel usage */
-    ++ctx->cycle.periods;
-    if (ctx->rx_in_progress) {
-        ctx->cycle.silence = 0;
-    }
-    else {
-        if (ctx->cycle.periods > CONTIKIMAC_MAX_NONACTIVITY_PERIODS) {
-            /* Fast sleep optimization */
-            /* The radio energy detected by the CCA was not a packet directed to us */
+    if (ctx->timeout_flag) {
+        if (ctx->rx_in_progress) {
+            LOG_ERROR("gnrc_contikimac(%d): RX timeout\n",
+                      thread_getpid());
+        }
+        else if (ctx->seen_silence) {
+            LOG_ERROR("gnrc_contikimac(%d): Fast sleep (long silence)\n",
+                      thread_getpid());
+        }
+        else {
             LOG_ERROR("gnrc_contikimac(%d): Fast sleep (noise)\n",
                       thread_getpid());
-            gnrc_contikimac_radio_sleep(dev);
+        }
+        gnrc_contikimac_radio_sleep(dev);
+    }
+    else if (ctx->rx_in_progress) {
+        /* Set a timeout for the currently in progress RX frame */
+        xtimer_set(&ctx->timers.timeout, ctx->params->rx_timeout);
+    }
+    else if (ctx->seen_silence) {
+        /* We have detected an idle channel, expect incoming traffic very soon */
+        int res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): Failed setting NETOPT_STATE_IDLE: %d\n",
+                      thread_getpid(), res);
             return;
         }
+    }
+    else {
+        /* We have detected some energy on the channel, we will keep checking
+         * the channel periodically until it is idle, then switch to listen state */
         /* Performing a CCA check while a packet is being received may cause the
-         * driver to abort the reception */
+         * driver to abort the reception, we will only do CCAs while waiting for
+         * the first silence */
         netopt_enable_t channel_clear;
         int res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
         if (res < 0) {
@@ -406,28 +447,14 @@ static void gnrc_contikimac_tick(contikimac_context_t *ctx)
             return;
         }
         if (channel_clear) {
-            /* Silent period */
-            ++ctx->cycle.silence;
+            /* Silence detected */
+            ctx->seen_silence = true;
+            thread_flags_set(ctx->thread, CONTIKIMAC_THREAD_FLAG_TICK);
         }
         else {
-            /* Detected some radio energy */
-            ctx->cycle.silence = 0;
+            xtimer_periodic(&ctx->timers.tick, &ctx->last_tick, ctx->params->after_ed_scan_interval);
         }
     }
-//     LOG_ERROR("%u %u\n", ctx->cycle.periods, ctx->cycle.silence);
-    if (ctx->cycle.silence > CONTIKIMAC_MAX_SILENT_PERIODS) {
-        /* Fast sleep optimization: Turn off the radio if the silence after the
-         * detection is longer than the retransmission interval */
-        LOG_ERROR("gnrc_contikimac(%d): Fast sleep (silence)\n",
-                  thread_getpid());
-        gnrc_contikimac_radio_sleep(dev);
-        return;
-    }
-    if (xtimer_less(ctx->listen_timeout, xtimer_now()))
-    {
-        return;
-    }
-    xtimer_periodic(&ctx->timers.tick, &ctx->last_tick, CONTIKIMAC_CCA_CYCLE_TIME);
 }
 
 static void setup_netdev(netdev_t *dev)
@@ -479,6 +506,13 @@ static void cb_set_tick_flag(void *arg)
 //     LOG_ERROR("T\n");
 }
 
+static void cb_timeout(void *arg)
+{
+    contikimac_context_t *ctx = arg;
+    ctx->timeout_flag = true;
+    thread_flags_set(ctx->thread, CONTIKIMAC_THREAD_FLAG_TICK);
+}
+
 /**
  * @brief   Startup code and event loop of the gnrc_contikimac layer
  *
@@ -490,8 +524,9 @@ static void *_gnrc_contikimac_thread(void *args)
 {
     DEBUG("gnrc_contikimac(%d): starting thread\n", thread_getpid());
 
-    gnrc_netdev_t *gnrc_netdev = args;
+    gnrc_netdev_t *gnrc_netdev = ((struct thread_args *)args)->gnrc_netdev;
     contikimac_context_t ctx = {
+        .params = ((struct thread_args *)args)->params,
         .gnrc_netdev = gnrc_netdev,
         .timers = {
             .tick = {
@@ -500,9 +535,16 @@ static void *_gnrc_contikimac_thread(void *args)
                 .callback = cb_set_tick_flag,
             },
             .channel_check = { .target = 0, .long_target = 0},
+            .timeout = {
+                .target = 0,
+                .long_target = 0,
+                .callback = cb_timeout,
+            },
         },
     };
-    ctx.timers.tick.arg = (thread_t *)thread_get(thread_getpid());
+    ctx.thread = (thread_t *)thread_get(thread_getpid());
+    ctx.timers.timeout.arg = &ctx;
+    ctx.timers.tick.arg = ctx.thread;
     netdev_t *dev = gnrc_netdev->dev;
 
     gnrc_netdev->pid = thread_getpid();
@@ -573,8 +615,6 @@ static void *_gnrc_contikimac_thread(void *args)
                             thread_getpid(), res);
                         break;
                     }
-                    ctx.cycle.periods = 0;
-                    ctx.cycle.silence = 0;
                     LED0_ON;
                     bool found = false;
                     xtimer_ticks32_t last_wakeup = xtimer_now();
@@ -597,18 +637,11 @@ static void *_gnrc_contikimac_thread(void *args)
 //                     LOG_ERROR("L: %lu\n", last_wakeup.ticks32);
                     if (found) {
                         /* Set the radio to listen for incoming packets */
-                        DEBUG("gnrc_contikimac(%d): Detected, listening\n", thread_getpid());
-                        res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
-                        if (res < 0) {
-                            LOG_ERROR("gnrc_contikimac(%d): Failed setting NETOPT_STATE_IDLE: %d\n",
-                                thread_getpid(), res);
-                            break;
-                        }
+                        DEBUG("gnrc_contikimac(%d): Detected, looking for silence\n", thread_getpid());
                         ctx.last_tick = xtimer_now();
-                        /* TODO implement xtimer_add32 or sth */
-                        ctx.listen_timeout = xtimer_ticks(ctx.last_tick.ticks32 +
-                            xtimer_ticks_from_usec(CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED).ticks32);
-                        thread_flags_set((thread_t *)thread_get(thread_getpid()), CONTIKIMAC_THREAD_FLAG_TICK);
+                        ctx.rx_in_progress = false;
+                        ctx.seen_silence = false;
+                        thread_flags_set(ctx.thread, CONTIKIMAC_THREAD_FLAG_TICK);
                         LOG_ERROR("D\n");
                     }
                     else {
@@ -659,7 +692,7 @@ static void *_gnrc_contikimac_thread(void *args)
                     }
                     LOG_ERROR("TX\n");
                     gnrc_netdev->send(gnrc_netdev, pkt);
-                    gnrc_contikimac_send(dev, pkt);
+                    gnrc_contikimac_send(&ctx, pkt);
                     /* Restore old state */
                     res = dev->driver->set(dev, NETOPT_STATE, &old_state, sizeof(old_state));
                     if (res < 0) {
@@ -717,7 +750,7 @@ static void *_gnrc_contikimac_thread(void *args)
 }
 
 kernel_pid_t gnrc_contikimac_init(char *stack, int stacksize, char priority,
-                        const char *name, gnrc_netdev_t *gnrc_netdev)
+    const char *name, gnrc_netdev_t *gnrc_netdev, const contikimac_params_t *params)
 {
     kernel_pid_t res;
 
@@ -726,9 +759,15 @@ kernel_pid_t gnrc_contikimac_init(char *stack, int stacksize, char priority,
         return -ENODEV;
     }
 
+    /* Stack allocated, this will be invalid as soon as this function returns,
+     * therefore, use THREAD_CREATE_WOUT_YIELD and copy the contents ASAP in the
+     * other thread */
+    struct thread_args args = { .gnrc_netdev = gnrc_netdev, .params = params };
+
     /* create new gnrc_netdev thread */
-    res = thread_create(stack, stacksize, priority, THREAD_CREATE_STACKTEST,
-                        _gnrc_contikimac_thread, gnrc_netdev, name);
+    res = thread_create(stack, stacksize, priority,
+        (THREAD_CREATE_STACKTEST | THREAD_CREATE_WOUT_YIELD),
+        _gnrc_contikimac_thread, &args, name);
     if (res <= 0) {
         return -EINVAL;
     }
