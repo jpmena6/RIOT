@@ -11,8 +11,10 @@
  * @ingroup     net_gnrc
  * @brief       Duty cycling MAC protocol for low power communication over IEEE 802.15.4 networks
  *
- * @see Dunkels, A. (2011). The contikimac radio duty cycling protocol. http://soda.swedish-ict.se/5128/1/contikimac-report.pdf
- * @see Michel, M., & Quoitin, B. (2014). Technical report: ContikiMAC vs X-MAC performance analysis. arXiv preprint arXiv:1404.3589. https://arxiv.org/abs/1404.3589
+ * @see Dunkels, A. (2011). The contikimac radio duty cycling protocol.
+ *      http://soda.swedish-ict.se/5128/1/contikimac-report.pdf
+ * @see Michel, M., & Quoitin, B. (2014). Technical report: ContikiMAC vs X-MAC
+ *      performance analysis. arXiv preprint arXiv:1404.3589. https://arxiv.org/abs/1404.3589
  *
  * # Summary
  *
@@ -344,17 +346,31 @@ typedef struct {
  * device and starts a link layer event loop.
  *
  * @param[in] stack         stack for the control thread
- * @param[in] stacksize     size of *stack*
+ * @param[in] stacksize     size of @p stack
  * @param[in] priority      priority for the thread
  * @param[in] name          name of the thread
  * @param[in] dev           netdev device, needs to be already initialized
+ * @param[in] params        pointer to ContikiMAC parameters
  *
  * @return                  PID of thread on success
  * @return                  -EINVAL if creation of thread fails
  * @return                  -ENODEV if *dev* is invalid
  */
 kernel_pid_t gnrc_contikimac_init(char *stack, int stacksize, char priority,
-                             const char *name, gnrc_netdev_t *dev);
+    const char *name, gnrc_netdev_t *dev, const contikimac_params_t *params);
+
+/**
+ * @brief Default settings for O-QPSK 250 kbit/s
+ */
+static const contikimac_params_t contikimac_params_OQPSK250 = {
+    .channel_check_period = 1000000ul / 8, /* T_w, 8 Hz */
+    .cca_cycle_period = 54 * 16 / 2, /* T_c = T_i / (n_c - 1) */
+    .inter_packet_interval = 54 * 16, /* T_i = Ack timeout */
+    .after_ed_scan_timeout = 4500, /* > T_l */
+    .after_ed_scan_interval = 500, /* < T_i */
+    .rx_timeout = 4500, /* > T_l */
+    .cca_count_max = 3, /* n_c */
+};
 
 #ifdef __cplusplus
 }
