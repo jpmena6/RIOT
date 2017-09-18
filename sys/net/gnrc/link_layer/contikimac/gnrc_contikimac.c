@@ -182,15 +182,6 @@ typedef struct {
     bool timeout_flag;
 } contikimac_context_t;
 
-/**
- * @brief Helper struct for passing more than one argument to the thread from
- * the init function
- */
-struct thread_args {
-    gnrc_netdev_t *gnrc_netdev;
-    const contikimac_params_t *params;
-};
-
 /* Internal constants used for the netdev set NETOPT_STATE calls, as it requires
  * a pointer to the value as argument */
 static const netopt_state_t state_standby = NETOPT_STATE_STANDBY;
@@ -201,13 +192,6 @@ static const netopt_state_t state_tx      = NETOPT_STATE_TX;
  * @brief Internal helper used for passing the received packets to the next layer
  */
 static void _pass_on_packet(gnrc_pktsnip_t *pkt);
-
-/**
- * @brief   Function called by the device driver on device events
- *
- * @param[in] event     type of event
- */
-static void _event_cb(netdev_t *dev, netdev_event_t event);
 
 /**
  * @brief Put the radio to sleep immediately
@@ -234,6 +218,13 @@ static void gnrc_contikimac_tick(contikimac_context_t *ctx);
 static void setup_netdev(netdev_t *dev);
 
 /**
+ * @brief   Function called by the device driver on device events
+ *
+ * @param[in] event     type of event
+ */
+static void cb_event(netdev_t *dev, netdev_event_t event);
+
+/**
  * @brief xtimer callback for setting a thread flag
  */
 static void cb_set_tick_flag(void *arg);
@@ -243,7 +234,9 @@ static void cb_set_tick_flag(void *arg);
  */
 static void cb_timeout(void *arg);
 
-static void _event_cb(netdev_t *dev, netdev_event_t event)
+static uint32_t time_begin = 0;
+
+static void cb_event(netdev_t *dev, netdev_event_t event)
 {
     gnrc_netdev_t *gnrc_netdev = dev->context;
 
@@ -322,6 +315,7 @@ static void gnrc_contikimac_radio_sleep(netdev_t *dev)
               thread_getpid(), res);
     }
     LED0_OFF;
+    LOG_ERROR("r: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
 }
 
 static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
@@ -406,6 +400,10 @@ static void gnrc_contikimac_tick(contikimac_context_t *ctx)
     netdev_t *dev = ctx->gnrc_netdev->dev;
     /* Periodically perform CCA checks to evaluate channel usage */
     if (ctx->timeout_flag) {
+        xtimer_remove(&ctx->timers.tick);
+        xtimer_remove(&ctx->timers.timeout);
+        thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
+        //~ LOG_ERROR("t: %lu\tc: %lu\n", (unsigned long)xtimer_now_usec() - time_begin, tick_count);
         if (ctx->rx_in_progress) {
             LOG_ERROR("gnrc_contikimac(%d): RX timeout\n",
                       thread_getpid());
@@ -421,19 +419,12 @@ static void gnrc_contikimac_tick(contikimac_context_t *ctx)
         gnrc_contikimac_radio_sleep(dev);
     }
     else if (ctx->rx_in_progress) {
+        LOG_ERROR("RINP\n");
         /* Set a timeout for the currently in progress RX frame */
         xtimer_set(&ctx->timers.timeout, ctx->params->rx_timeout);
     }
-    else if (ctx->seen_silence) {
-        /* We have detected an idle channel, expect incoming traffic very soon */
-        int res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
-        if (res < 0) {
-            LOG_ERROR("gnrc_contikimac(%d): Failed setting NETOPT_STATE_IDLE: %d\n",
-                      thread_getpid(), res);
-            return;
-        }
-    }
     else {
+        //~ LOG_ERROR("C\n");
         /* We have detected some energy on the channel, we will keep checking
          * the channel periodically until it is idle, then switch to listen state */
         /* Performing a CCA check while a packet is being received may cause the
@@ -448,10 +439,18 @@ static void gnrc_contikimac_tick(contikimac_context_t *ctx)
         }
         if (channel_clear) {
             /* Silence detected */
-            ctx->seen_silence = true;
-            thread_flags_set(ctx->thread, CONTIKIMAC_THREAD_FLAG_TICK);
+            /* We have detected an idle channel, expect incoming traffic very soon */
+            int res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
+            if (res < 0) {
+                LOG_ERROR("gnrc_contikimac(%d): Failed setting NETOPT_STATE_IDLE: %d\n",
+                          thread_getpid(), res);
+                return;
+            }
+            /* Set timeout in case we only detected noise */
+            xtimer_set(&ctx->timers.timeout, ctx->params->listen_timeout);
         }
         else {
+            /* Do next CCA */
             xtimer_periodic(&ctx->timers.tick, &ctx->last_tick, ctx->params->after_ed_scan_interval);
         }
     }
@@ -511,6 +510,7 @@ static void cb_timeout(void *arg)
     contikimac_context_t *ctx = arg;
     ctx->timeout_flag = true;
     thread_flags_set(ctx->thread, CONTIKIMAC_THREAD_FLAG_TICK);
+    LOG_ERROR("TO\n");
 }
 
 /**
@@ -520,13 +520,13 @@ static void cb_timeout(void *arg)
  *
  * @return          never returns
  */
-static void *_gnrc_contikimac_thread(void *args)
+static void *_gnrc_contikimac_thread(void *arg)
 {
     DEBUG("gnrc_contikimac(%d): starting thread\n", thread_getpid());
 
-    gnrc_netdev_t *gnrc_netdev = ((struct thread_args *)args)->gnrc_netdev;
+    gnrc_netdev_t *gnrc_netdev = arg;
     contikimac_context_t ctx = {
-        .params = ((struct thread_args *)args)->params,
+        .params = &contikimac_params_OQPSK250,
         .gnrc_netdev = gnrc_netdev,
         .timers = {
             .tick = {
@@ -542,6 +542,7 @@ static void *_gnrc_contikimac_thread(void *args)
             },
         },
     };
+    thread_yield();
     ctx.thread = (thread_t *)thread_get(thread_getpid());
     ctx.timers.timeout.arg = &ctx;
     ctx.timers.tick.arg = ctx.thread;
@@ -557,7 +558,7 @@ static void *_gnrc_contikimac_thread(void *args)
     msg_init_queue(msg_queue, CONTIKIMAC_MSG_QUEUE_SIZE);
 
     /* register the event callback with the device driver */
-    dev->event_callback = _event_cb;
+    dev->event_callback = cb_event;
     dev->context = gnrc_netdev;
 
     /* Initialize the radio duty cycling by passing an initial event */
@@ -584,27 +585,33 @@ static void *_gnrc_contikimac_thread(void *args)
             DEBUG("gnrc_contikimac(%d): ISR event\n", thread_getpid());
             dev->driver->isr(dev);
         }
-        if (flags & CONTIKIMAC_THREAD_FLAG_TICK) {
-            gnrc_contikimac_tick(&ctx);
-        }
         while (msg_try_receive(&msg) > 0) {
             /* dispatch NETDEV and NETAPI messages */
             switch (msg.type) {
                 case CONTIKIMAC_MSG_TYPE_RX_BEGIN:
                     ctx.rx_in_progress = true;
-                    LOG_ERROR("RXB\n");
+                    xtimer_remove(&ctx.timers.tick);
+                    xtimer_remove(&ctx.timers.timeout);
+                    thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
+                    ctx.timeout_flag = false;
+                    /* Set a timeout for the currently in progress RX frame */
+                    xtimer_set(&ctx.timers.timeout, ctx.params->rx_timeout);
+                    LOG_ERROR("RB\n");
                     break;
                 case CONTIKIMAC_MSG_TYPE_RX_END:
                     /* TODO process frame pending field */
                     ctx.rx_in_progress = false;
                     /* We received a packet, stop checking the channel and go back to sleep */
-                    LOG_ERROR("RXE\n");
                     xtimer_remove(&ctx.timers.tick);
+                    xtimer_remove(&ctx.timers.timeout);
                     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
+                    LOG_ERROR("RE\n");
                     gnrc_contikimac_radio_sleep(dev);
+                    LOG_ERROR("u: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
                     break;
                 case CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK:
                 {
+                    time_begin = xtimer_now_usec();
                     DEBUG("gnrc_contikimac(%d): Checking channel\n", thread_getpid());
                     /* Perform multiple CCA and check the results */
                     /* This resets the tick sequence */
@@ -641,8 +648,11 @@ static void *_gnrc_contikimac_thread(void *args)
                         ctx.last_tick = xtimer_now();
                         ctx.rx_in_progress = false;
                         ctx.seen_silence = false;
+                        ctx.timeout_flag = false;
                         thread_flags_set(ctx.thread, CONTIKIMAC_THREAD_FLAG_TICK);
-                        LOG_ERROR("D\n");
+                        /* Set timeout in case we only detected noise */
+                        xtimer_set(&ctx.timers.timeout, ctx.params->after_ed_scan_timeout);
+                        //~ LOG_ERROR("D\n");
                     }
                     else {
                         /* Nothing detected, immediately return to sleep */
@@ -744,13 +754,16 @@ static void *_gnrc_contikimac_thread(void *args)
                     break;
             }
         }
+        if (flags & CONTIKIMAC_THREAD_FLAG_TICK) {
+            gnrc_contikimac_tick(&ctx);
+        }
     }
     /* never reached */
     return NULL;
 }
 
 kernel_pid_t gnrc_contikimac_init(char *stack, int stacksize, char priority,
-    const char *name, gnrc_netdev_t *gnrc_netdev, const contikimac_params_t *params)
+    const char *name, gnrc_netdev_t *gnrc_netdev)
 {
     kernel_pid_t res;
 
@@ -759,15 +772,9 @@ kernel_pid_t gnrc_contikimac_init(char *stack, int stacksize, char priority,
         return -ENODEV;
     }
 
-    /* Stack allocated, this will be invalid as soon as this function returns,
-     * therefore, use THREAD_CREATE_WOUT_YIELD and copy the contents ASAP in the
-     * other thread */
-    struct thread_args args = { .gnrc_netdev = gnrc_netdev, .params = params };
-
     /* create new gnrc_netdev thread */
-    res = thread_create(stack, stacksize, priority,
-        (THREAD_CREATE_STACKTEST | THREAD_CREATE_WOUT_YIELD),
-        _gnrc_contikimac_thread, &args, name);
+    res = thread_create(stack, stacksize, priority, THREAD_CREATE_STACKTEST,
+        _gnrc_contikimac_thread, gnrc_netdev, name);
     if (res <= 0) {
         return -EINVAL;
     }
