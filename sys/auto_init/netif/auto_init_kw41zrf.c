@@ -35,7 +35,7 @@
  * @{
  */
 #ifndef KW41ZRF_MAC_STACKSIZE
-#define KW41ZRF_MAC_STACKSIZE     (THREAD_STACKSIZE_DEFAULT)
+#define KW41ZRF_MAC_STACKSIZE     (THREAD_STACKSIZE_DEFAULT + THREAD_EXTRA_STACKSIZE_PRINTF)
 #endif
 #ifndef KW41ZRF_MAC_PRIO
 #define KW41ZRF_MAC_PRIO          (GNRC_NETDEV_MAC_PRIO)
@@ -60,7 +60,7 @@ void auto_init_kw41zrf(void)
         else {
 #if MODULE_GNRC_CONTIKIMAC
             gnrc_contikimac_init(_kw41zrf_stacks[i], KW41ZRF_MAC_STACKSIZE,
-                             KW41ZRF_MAC_PRIO, "kw41zrf-contikimac", &gnrc_adpt[i]);
+                KW41ZRF_MAC_PRIO, "kw41zrf-contikimac", &gnrc_adpt[i]);
 #else
             gnrc_netdev_init(_kw41zrf_stacks[i], KW41ZRF_MAC_STACKSIZE,
                              KW41ZRF_MAC_PRIO, "kw41zrf-netdev", &gnrc_adpt[i]);
