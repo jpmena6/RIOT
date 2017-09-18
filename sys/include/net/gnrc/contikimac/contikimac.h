@@ -83,7 +83,9 @@
  * # Implementation details
  *
  * This section gives some extra information regarding this specific
- * implementation.
+ * implementation. This implementation was inspired by Contiki code, but written
+ * from scratch to fit RIOT and the GNRC stack. All algorithmic details are
+ * taken from [dunkels11].
  *
  * The timing is handled by the xtimer system, this means that the platform
  * needs to use a low power timer for xtimer in order to use the low power modes
@@ -313,7 +315,7 @@ typedef struct {
      * Fast sleep optimization: After energy has been detected on the channel,
      * the MAC layer will keep scanning the channel until it sees some silence.
      *
-     * For reliable communication, this must at least as long as the time it
+     * For reliable communication, this must be at least as long as the time it
      * takes to transmit the longest possible frame.
      */
     uint32_t after_ed_scan_timeout;
@@ -322,10 +324,18 @@ typedef struct {
      */
     uint32_t after_ed_scan_interval;
     /**
+     * @brief (usec) time to wait while listening for incoming packets before
+     * turning off the radio
+     *
+     * For reliable communication, this must be at least inter_packet_interval +
+     * the time it takes for the radio to detect and signal the RX begin interrupt.
+     */
+    uint32_t listen_timeout;
+    /**
      * @brief (usec) time to wait after an RX begin event before turning off the
      * radio
      *
-     * For reliable communication, this must at least as long as the time it
+     * For reliable communication, this must be at least as long as the time it
      * takes to transmit the longest possible frame.
      */
     uint32_t rx_timeout;
@@ -357,20 +367,12 @@ typedef struct {
  * @return                  -ENODEV if *dev* is invalid
  */
 kernel_pid_t gnrc_contikimac_init(char *stack, int stacksize, char priority,
-    const char *name, gnrc_netdev_t *dev, const contikimac_params_t *params);
+    const char *name, gnrc_netdev_t *dev);
 
 /**
  * @brief Default settings for O-QPSK 250 kbit/s
  */
-static const contikimac_params_t contikimac_params_OQPSK250 = {
-    .channel_check_period = 1000000ul / 8, /* T_w, 8 Hz */
-    .cca_cycle_period = 54 * 16 / 2, /* T_c = T_i / (n_c - 1) */
-    .inter_packet_interval = 54 * 16, /* T_i = Ack timeout */
-    .after_ed_scan_timeout = 4500, /* > T_l */
-    .after_ed_scan_interval = 500, /* < T_i */
-    .rx_timeout = 4500, /* > T_l */
-    .cca_count_max = 3, /* n_c */
-};
+extern const contikimac_params_t contikimac_params_OQPSK250;
 
 #ifdef __cplusplus
 }
