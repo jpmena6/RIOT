@@ -99,6 +99,7 @@ typedef struct {
     bool seen_silence;
     bool rx_in_progress;
     bool timeout_flag;
+    bool no_sleep;
 } contikimac_context_t;
 
 /* Internal constants used for the netdev set NETOPT_STATE calls, as it requires
@@ -457,6 +458,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                 .callback = cb_timeout,
             },
         },
+        .no_sleep = false,
     };
     thread_yield();
     ctx.thread = (thread_t *)thread_get(thread_getpid());
@@ -632,8 +634,34 @@ static void *_gnrc_contikimac_thread(void *arg)
                     gnrc_netapi_opt_t *opt = msg.content.ptr;
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_SET received. opt=%s\n",
                         thread_getpid(), netopt2str(opt->opt));
-                    /* set option for device driver */
-                    int res = dev->driver->set(dev, opt->opt, opt->data, opt->data_len);
+                    int res;
+                    switch (opt->opt) {
+                        case NETOPT_MAC_NO_SLEEP:
+                            assert(opt->data_len >= sizeof(netopt_enable_t));
+                            ctx.no_sleep = *((const netopt_enable_t *)opt->data);
+                            if (ctx.no_sleep) {
+                                /* Disable radio duty cycling by killing the timers */
+                                xtimer_remove(&ctx.timers.tick);
+                                xtimer_remove(&ctx.timers.channel_check);
+                                /* switch the radio to listen state */
+                                res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
+                                if (res < 0) {
+                                    DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_IDLE: %d\n",
+                                          thread_getpid(), res);
+                                }
+                            }
+                            else {
+                                /* Start the radio duty cycling by passing an initial event */
+                                msg_send(&msg_channel_check, thread_getpid());
+                                ctx.last_channel_check = xtimer_now();
+                            }
+                            res = sizeof(netopt_enable_t);
+                            break;
+                        default:
+                            /* set option for device driver */
+                            res = dev->driver->set(dev, opt->opt, opt->data, opt->data_len);
+                            break;
+                    }
                     DEBUG("gnrc_contikimac(%d): response of netdev->set: %i\n",
                         thread_getpid(), res);
                     /* send reply to calling thread */
@@ -650,8 +678,18 @@ static void *_gnrc_contikimac_thread(void *arg)
                     gnrc_netapi_opt_t *opt = msg.content.ptr;
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_GET received. opt=%s\n",
                         thread_getpid(), netopt2str(opt->opt));
-                    /* get option from device driver */
-                    int res = dev->driver->get(dev, opt->opt, opt->data, opt->data_len);
+                    int res;
+                    switch (opt->opt) {
+                        case NETOPT_MAC_NO_SLEEP:
+                            assert(opt->data_len >= sizeof(netopt_enable_t));
+                            *((netopt_enable_t *)opt->data) = ctx.no_sleep;
+                            res = sizeof(netopt_enable_t);
+                            break;
+                        default:
+                            /* get option from device driver */
+                            res = dev->driver->get(dev, opt->opt, opt->data, opt->data_len);
+                            break;
+                    }
                     DEBUG("gnrc_contikimac(%d): response of netdev->get: %i\n",
                         thread_getpid(), res);
                     /* send reply to calling thread */
