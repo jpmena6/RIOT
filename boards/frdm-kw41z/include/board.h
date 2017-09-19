@@ -51,53 +51,41 @@ extern "C"
 /** @} */
 
 /**
- * @brief   xtimer configuration
+ * @name   xtimer configuration
+ *
+ * @todo Move Kinetis xtimer config to kinetis_common
  * @{
  */
-#if 1
+#if KINETIS_XTIMER_SOURCE_PIT
+/* PIT xtimer configuration */
+#define XTIMER_DEV                  (TIMER_PIT_DEV(0))
+#define XTIMER_CHAN                 (0)
+/* Default xtimer settings should work on the PIT */
+#else
 /* LPTMR xtimer configuration */
-/* WIP, Use PIT for now */
 #define XTIMER_DEV                  (TIMER_LPTMR_DEV(0))
 #define XTIMER_CHAN                 (0)
-/* LPTMR is 16 bits wide */
+/* LPTMR is 16 bits wide and runs at 32768 Hz (clocked by the RTC) */
 #define XTIMER_WIDTH                (16)
 #define XTIMER_BACKOFF              (5)
 #define XTIMER_ISR_BACKOFF          (5)
 #define XTIMER_OVERHEAD             (4)
 #define XTIMER_HZ                   (32768ul)
 #define XTIMER_SHIFT                (0)
-#else
-/* PIT xtimer configuration */
-#define XTIMER_DEV                  (TIMER_PIT_DEV(0))
-#define XTIMER_CHAN                 (0)
-#define XTIMER_WIDTH                (32)
-#define XTIMER_BACKOFF              (40)
-#define XTIMER_ISR_BACKOFF          (40)
-#define XTIMER_OVERHEAD             (30)
-#define XTIMER_HZ                   (1000000ul)
-#define XTIMER_SHIFT                (0)
 #endif
 /** @} */
 
 /**
  * @name NOR flash hardware configuration
+ * @{
  */
-/** @{ */
 #define FRDM_NOR_SPI_DEV               SPI_DEV(0)
 #define FRDM_NOR_SPI_CLK               SPI_CLK_5MHZ
 #define FRDM_NOR_SPI_CS                SPI_HWCS(0) /**< Flash CS pin */
 /** @} */
 
 /**
- * @name MTD configuration
- */
-/** @{ */
-/* extern mtd_dev_t *mtd0; */
-#define MTD_0 mtd0
-/** @} */
-
-/**
- * @brief Initialize board specific hardware, including clock, LEDs and std-IO
+ * @brief Initialize board specific hardware, including clock, LEDs and standard I/O
  */
 void board_init(void);
 
