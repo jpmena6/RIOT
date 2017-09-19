@@ -156,9 +156,11 @@
  * thread flags as well */
 #define CONTIKIMAC_THREAD_FLAG_ISR       (1 << 0)
 #define CONTIKIMAC_THREAD_FLAG_TICK      (1 << 1)
-#define CONTIKIMAC_THREAD_FLAG_TX_NOACK  (1 << 2)
-#define CONTIKIMAC_THREAD_FLAG_TX_ERROR  (1 << 3)
-#define CONTIKIMAC_THREAD_FLAG_TX_OK     (1 << 4)
+/* The two TX_STATUS flags are used together as a bitfield */
+#define CONTIKIMAC_THREAD_FLAG_TX_STATUS (3 << 2)
+#define CONTIKIMAC_THREAD_FLAG_TX_OK     (1 << 2)
+#define CONTIKIMAC_THREAD_FLAG_TX_NOACK  (2 << 2)
+#define CONTIKIMAC_THREAD_FLAG_TX_ERROR  (3 << 2)
 
 /**
  * @brief Context information about the state of the MAC layer
@@ -325,29 +327,35 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
     bool broadcast = ((netif_hdr->flags &
         (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)));
 
-    xtimer_ticks32_t tx_timeout = xtimer_ticks_from_usec(xtimer_now_usec() + CONTIKIMAC_STROBE_TIME);
     bool do_transmit = true;
     uint32_t time_before = 0;
     time_before = xtimer_now_usec();
     xtimer_ticks32_t last_irq = {0};
-    do {
+    /* TX aborts listening mode */
+    xtimer_remove(&ctx->timers.tick);
+    if (ctx->rx_in_progress) {
+        /* TODO let the in progress RX frame finish before starting TX */
+    }
+    xtimer_remove(&ctx->timers.timeout);
+    thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
+    ctx->timeout_flag = false;
+    /* Set timeout for TX operation */
+    xtimer_set(&ctx->timers.timeout, ctx->params->channel_check_period + 2 * ctx->params->cca_cycle_period);
+    while(!ctx->timeout_flag) {
         thread_flags_t txflags;
         if (do_transmit) {
 //             time_before = xtimer_now_usec();
 //             uint32_t time_after = xtimer_now_usec();
 //             LOG_ERROR("S: %lu\n", time_after - time_before);
             do_transmit = false;
-            thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_NOACK |
-                               CONTIKIMAC_THREAD_FLAG_TX_ERROR |
-                               CONTIKIMAC_THREAD_FLAG_TX_OK);
+            thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_STATUS);
             time_before = xtimer_now_usec();
             dev->driver->set(dev, NETOPT_STATE, &state_tx, sizeof(state_tx));
         }
         txflags = thread_flags_wait_any(
-            CONTIKIMAC_THREAD_FLAG_TX_NOACK |
-            CONTIKIMAC_THREAD_FLAG_TX_ERROR |
-            CONTIKIMAC_THREAD_FLAG_TX_OK |
-            CONTIKIMAC_THREAD_FLAG_ISR);
+            CONTIKIMAC_THREAD_FLAG_TX_STATUS |
+            CONTIKIMAC_THREAD_FLAG_ISR |
+            CONTIKIMAC_THREAD_FLAG_TICK);
         if (txflags & CONTIKIMAC_THREAD_FLAG_ISR) {
             /* To get the wait timing right we will save the timestamp here.
              * The time of the last IRQ before the TX_OK or TX_NOACK flag was
@@ -358,41 +366,34 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
         }
         /* note: intentionally not an else if, the ISR flag may become set again
          * by the driver after the TX_xxx flag has been set. */
-        if (txflags & CONTIKIMAC_THREAD_FLAG_TX_OK) {
-            /* For unicast, stop after receiving the first Ack */
-            if (!broadcast) {
-                uint32_t time_after = xtimer_now_usec();
-                LOG_ERROR("O: %lu\n", time_after - time_before);
+        switch (txflags & CONTIKIMAC_THREAD_FLAG_TX_STATUS) {
+            case CONTIKIMAC_THREAD_FLAG_TX_OK:
+                /* For unicast, stop after receiving the first Ack */
+                if (!broadcast) {
+                    uint32_t time_after = xtimer_now_usec();
+                    LOG_ERROR("O: %lu\n", time_after - time_before);
+                    break;
+                }
+                /* For broadcast and multicast, always transmit for the full strobe
+                 * duration, but wait for a short while before retransmitting */
+                xtimer_periodic_wakeup(&last_irq, ctx->params->inter_packet_interval);
+                /* fall through */
+            case CONTIKIMAC_THREAD_FLAG_TX_NOACK:
+            case CONTIKIMAC_THREAD_FLAG_TX_ERROR:
+                /* Skip wait on TX errors */
+                /* Consider the inter_packet_interval already passed without calling
+                 * xtimer to verify. Modify this part if inter_packet_interval is much
+                 * longer than the Ack timeout */
+                /* retransmit */
+                do_transmit = true;
                 break;
-            }
-            /* For broadcast and multicast, always transmit for the full
-             * duration of STROBE_TIME. */
-            do_transmit = true;
-            /* Wait for a short while before retransmitting */
-            xtimer_periodic_wakeup(&last_irq, CONTIKIMAC_INTER_PACKET_INTERVAL);
+            default:
+                /* Still waiting to hear back from the TX operation */
+                break;
         }
-        /* note: else if is intentional, only one of TX_OK, TX_NOACK, TX_ERROR
-         * should be handled, they all result in retransmissions, only the
-         * timing differs */
-        else if (txflags & CONTIKIMAC_THREAD_FLAG_TX_NOACK) {
-            /* retransmit */
-            do_transmit = true;
-            /* Constant comparison is deliberate, let the compiler optimize this away */
-            if ((CONTIKIMAC_INTER_PACKET_INTERVAL - CONTIKIMAC_ACK_WAIT_TIME) > SMALL_INTERVAL) {
-                /* the Ack timeout has already passed since the actual TX
-                 * completed, we need to subtract that time from the sleep interval */
-                xtimer_periodic_wakeup(&last_irq, CONTIKIMAC_INTER_PACKET_INTERVAL - CONTIKIMAC_ACK_WAIT_TIME);
-            }
-            /* else: consider the time already passed without calling xtimer to verify */
-        }
-        else if (txflags & CONTIKIMAC_THREAD_FLAG_TX_ERROR) {
-            /* Medium was busy or TX error */
-            do_transmit = true;
-            /* Skip wait on TX errors */
-        }
-        /* Keep retransmitting until STROBE_TIME has passed, or until we
+        /* Keep retransmitting until the strobe time has passed, or until we
          * receive an Ack. */
-    } while(xtimer_less(xtimer_now(), tx_timeout));
+    }
 }
 
 static void gnrc_contikimac_tick(contikimac_context_t *ctx)
@@ -677,7 +678,6 @@ static void *_gnrc_contikimac_thread(void *arg)
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_SND received\n",
                         thread_getpid());
                     /* Hold until we are done */
-                    /* TODO cache the important info */
                     gnrc_pktsnip_t *pkt = msg.content.ptr;
                     gnrc_pktbuf_hold(pkt, 1);
 
