@@ -127,14 +127,6 @@ static const adc_conf_t adc_config[] = {
 /** @} */
 
 /**
- * @name    PWM configuration
- * @{
- */
-#define PWM_NUMOF           (0)
-/** @} */
-
-
-/**
  * @name   SPI configuration
  *
  * Clock configuration values based on the configured 16Mhz module clock.
