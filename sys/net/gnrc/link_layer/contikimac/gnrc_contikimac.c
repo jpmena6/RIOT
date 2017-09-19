@@ -34,6 +34,27 @@
 
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
+/* Set to 1 to enable debug prints of the time spent in radio ON modes */
+#define ENABLE_TIMING_INFO (0)
+
+/* Set to 1 to use LED0_ON/LED0_OFF for a visual feedback of the radio power state */
+#ifndef CONTIKIMAC_DEBUG_LEDS
+#define CONTIKIMAC_DEBUG_LEDS 0
+#endif
+
+#if ENABLE_TIMING_INFO
+#define TIMING_PRINTF LOG_ERROR
+#else
+#define TIMING_PRINTF(...)
+#endif
+
+#if CONTIKIMAC_DEBUG_LEDS
+#define CONTIKIMAC_LED_ON LED0_ON
+#define CONTIKIMAC_LED_OFF LED0_OFF
+#else
+#define CONTIKIMAC_LED_ON
+#define CONTIKIMAC_LED_OFF
+#endif
 
 #if defined(MODULE_OD) && ENABLE_DEBUG
 #include "od.h"
@@ -212,8 +233,8 @@ static void gnrc_contikimac_radio_sleep(netdev_t *dev)
         DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_SLEEP: %d\n",
               thread_getpid(), res);
     }
-    LED0_OFF;
-    LOG_ERROR("r: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
+    CONTIKIMAC_LED_OFF;
+    TIMING_PRINTF("r: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
 }
 
 static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
@@ -225,7 +246,10 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
 
     bool do_transmit = true;
     uint32_t time_before = 0;
-    time_before = xtimer_now_usec();
+    (void) time_before;
+    if (ENABLE_TIMING_INFO) {
+        time_before = xtimer_now_usec();
+    }
     xtimer_ticks32_t last_irq = {0};
     /* TX aborts listening mode */
     xtimer_remove(&ctx->timers.tick);
@@ -240,12 +264,15 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
     while(!ctx->timeout_flag) {
         thread_flags_t txflags;
         if (do_transmit) {
-//             time_before = xtimer_now_usec();
-//             uint32_t time_after = xtimer_now_usec();
-//             LOG_ERROR("S: %lu\n", time_after - time_before);
+            /* For extra verbose TX timing info: */
+            /*
+            TIMING_PRINTF("S: %lu\n", (unsigned long)xtimer_now_usec() - time_before);
+            */
             do_transmit = false;
             thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TX_STATUS);
-            time_before = xtimer_now_usec();
+            if (ENABLE_TIMING_INFO) {
+                time_before = xtimer_now_usec();
+            }
             dev->driver->set(dev, NETOPT_STATE, &state_tx, sizeof(state_tx));
         }
         txflags = thread_flags_wait_any(
@@ -266,8 +293,7 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
             case CONTIKIMAC_THREAD_FLAG_TX_OK:
                 /* For unicast, stop after receiving the first Ack */
                 if (!broadcast) {
-                    uint32_t time_after = xtimer_now_usec();
-                    LOG_ERROR("O: %lu\n", time_after - time_before);
+                    TIMING_PRINTF("O: %lu\n", (unsigned long)xtimer_now_usec() - time_before);
                     break;
                 }
                 /* For broadcast and multicast, always transmit for the full strobe
@@ -315,13 +341,7 @@ static void gnrc_contikimac_tick(contikimac_context_t *ctx)
         }
         gnrc_contikimac_radio_sleep(dev);
     }
-    else if (ctx->rx_in_progress) {
-        LOG_ERROR("RINP\n");
-        /* Set a timeout for the currently in progress RX frame */
-        xtimer_set(&ctx->timers.timeout, ctx->params->rx_timeout);
-    }
     else {
-        //~ LOG_ERROR("C\n");
         /* We have detected some energy on the channel, we will keep checking
          * the channel periodically until it is idle, then switch to listen state */
         /* Performing a CCA check while a packet is being received may cause the
@@ -391,7 +411,7 @@ static void setup_netdev(netdev_t *dev)
         LOG_ERROR("gnrc_contikimac(%d): enable NETOPT_PRELOADING failed: %d\n",
                   thread_getpid(), res);
         LOG_ERROR("gnrc_contikimac requires NETOPT_PRELOADING, this node will "
-        "likely not be able to communicate with other nodes!\n");
+                  "likely not be able to communicate with other nodes!\n");
     }
 }
 
@@ -399,7 +419,6 @@ static void cb_set_tick_flag(void *arg)
 {
     thread_t *thread = arg;
     thread_flags_set(thread, CONTIKIMAC_THREAD_FLAG_TICK);
-//     LOG_ERROR("T\n");
 }
 
 static void cb_timeout(void *arg)
@@ -407,7 +426,7 @@ static void cb_timeout(void *arg)
     contikimac_context_t *ctx = arg;
     ctx->timeout_flag = true;
     thread_flags_set(ctx->thread, CONTIKIMAC_THREAD_FLAG_TICK);
-    LOG_ERROR("TO\n");
+    DEBUG("TO\n");
 }
 
 /**
@@ -493,7 +512,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                     ctx.timeout_flag = false;
                     /* Set a timeout for the currently in progress RX frame */
                     xtimer_set(&ctx.timers.timeout, ctx.params->rx_timeout);
-                    LOG_ERROR("RB\n");
+                    DEBUG("RB\n");
                     break;
                 case CONTIKIMAC_MSG_TYPE_RX_END:
                     /* TODO process frame pending field */
@@ -502,13 +521,15 @@ static void *_gnrc_contikimac_thread(void *arg)
                     xtimer_remove(&ctx.timers.tick);
                     xtimer_remove(&ctx.timers.timeout);
                     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
-                    LOG_ERROR("RE\n");
+                    DEBUG("RE\n");
                     gnrc_contikimac_radio_sleep(dev);
-                    LOG_ERROR("u: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
+                    TIMING_PRINTF("u: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
                     break;
                 case CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK:
                 {
-                    time_begin = xtimer_now_usec();
+                    if (ENABLE_TIMING_INFO) {
+                        time_begin = xtimer_now_usec();
+                    }
                     DEBUG("gnrc_contikimac(%d): Checking channel\n", thread_getpid());
                     /* Perform multiple CCA and check the results */
                     /* This resets the tick sequence */
@@ -519,10 +540,9 @@ static void *_gnrc_contikimac_thread(void *arg)
                             thread_getpid(), res);
                         break;
                     }
-                    LED0_ON;
+                    CONTIKIMAC_LED_ON;
                     bool found = false;
                     xtimer_ticks32_t last_wakeup = xtimer_now();
-//                     LOG_ERROR("l: %lu\n", last_wakeup.ticks32);
                     for (unsigned cca = ctx.params->cca_count_max; cca > 0; --cca) {
                         netopt_enable_t channel_clear;
                         res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
@@ -538,7 +558,6 @@ static void *_gnrc_contikimac_thread(void *arg)
                         }
                         xtimer_periodic_wakeup(&last_wakeup, ctx.params->cca_cycle_period);
                     }
-//                     LOG_ERROR("L: %lu\n", last_wakeup.ticks32);
                     if (found) {
                         /* Set the radio to listen for incoming packets */
                         DEBUG("gnrc_contikimac(%d): Detected, looking for silence\n", thread_getpid());
@@ -549,7 +568,6 @@ static void *_gnrc_contikimac_thread(void *arg)
                         thread_flags_set(ctx.thread, CONTIKIMAC_THREAD_FLAG_TICK);
                         /* Set timeout in case we only detected noise */
                         xtimer_set(&ctx.timers.timeout, ctx.params->after_ed_scan_timeout);
-                        //~ LOG_ERROR("D\n");
                     }
                     else {
                         /* Nothing detected, immediately return to sleep */
