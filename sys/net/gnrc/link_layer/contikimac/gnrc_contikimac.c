@@ -39,110 +39,6 @@
 #include "od.h"
 #endif
 
-/* TODO Move these parameters somewhere else */
-
-/* References:
- * [dunkels11] Dunkels, A. (2011). The contikimac radio duty cycling protocol.
- *     http://soda.swedish-ict.se/5128/1/contikimac-report.pdf
- */
-
-#ifndef CONTIKIMAC_CYCLE_TIME
-#ifndef CONTIKIMAC_CHANNEL_CHECK_RATE
-/* (Hz) frequency of channel checks */
-#define CONTIKIMAC_CHANNEL_CHECK_RATE 8
-#endif
-/* (usec) time between each wake period */
-#define CONTIKIMAC_CYCLE_TIME (1000000ul / CONTIKIMAC_CHANNEL_CHECK_RATE)
-#endif /* !defined(CONTIKIMAC_CYCLE_TIME) */
-
-/* Maximum number of CCA operations to perform during each wake cycle */
-/* The minimum setting for reliable communication is 2. Settings > 2
- * relaxes the requirements on shortest possible packet. */
-#define CONTIKIMAC_CCA_COUNT_MAX (3u)
-
-#if CONTIKIMAC_CCA_COUNT_MAX < 2
-#warning CONTIKIMAC_CCA_COUNT_MAX must be >= 2 for reliable communication
-#endif
-
-/* The numbers below are OK for IEEE 802.15.4 O-QPSK 250 kbit/s */
-
-/* Fast sleep optimization parameters */
-/* Maximum number of silent CCA cycles while listening for incoming traffic
- * until the radio is turned off */
-#define CONTIKIMAC_MAX_SILENT_PERIODS 5
-
-/* Maximum number of CCA cycles while listening for incoming traffic
- * until the radio is turned off */
-#define CONTIKIMAC_MAX_NONACTIVITY_PERIODS 10
-
-/* (usec) Ta+Td, time to wait for Ack packet after TX has completed.
- * The IEEE 802.15.4 standard specifies that the Ack will begin transmission
- * exactly AIFS after the packet has been received in non beacon enabled
- * networks. For beacon enabled networks, the transmission shall commence
- * between AIFS and AIFS + aUnitBackoffPeriod from the reception of the last
- * octet. This time interval is called Ta in [dunkels11].
- * The reception time of the Ack packet is called Td. We specify them summed
- * together because for our timing purposes we only need the total time from
- * transmission end to when we will time out waiting for the Ack.
- *
- * Numeric values for O-QPSK 250 kbit/s
- * AIFS = macSifsPeriod = 12 symbols
- * aUnitBackoffPeriod = 20 symbols
- * The Ack is 5 bytes in length and has a normal SFD (5 bytes) and PHR (1 byte),
- * which yields
- * 11 byte * 2 symbols/byte = 22 symbols
- * In total, the Ack wait duration is 54 symbols for beacon enabled networks,
- * and 34 otherwise. We simplify this to always use 54 symbols, since there are
- * hardware transceivers which have a fixed timeout of 54 symbols (e.g. at86rf2xx).
- */
-#define CONTIKIMAC_ACK_WAIT_TIME (54u * 16u)
-
-/* (usec) time to transmit a single byte */
-#define CONTIKIMAC_TX_TIME_PER_BYTE (2u * 16u)
-
-/* (usec) time it takes to transmit the start of frame delimiter (SFD) and PHY
- * header (PHR) fields */
-#define CONTIKIMAC_TX_PREAMBLE_TIME (6 * CONTIKIMAC_TX_TIME_PER_BYTE)
-
-/* (usec) Ti, time between successive retransmissions, must be less than Tc, and
- * greater than ACK_WAIT_TIME, or else we may start the retransmission before
- * the Ack has been sent.
- */
-#define CONTIKIMAC_INTER_PACKET_INTERVAL (CONTIKIMAC_ACK_WAIT_TIME)
-
-#if CONTIKIMAC_INTER_PACKET_INTERVAL < CONTIKIMAC_ACK_WAIT_TIME
-#error CONTIKIMAC_INTER_PACKET_INTERVAL too small, must be >= CONTIKIMAC_ACK_WAIT_TIME
-#endif
-
-/* (usec) Tc, sleep time between each successive CCA */
-#define CONTIKIMAC_CCA_SLEEP_TIME (CONTIKIMAC_INTER_PACKET_INTERVAL / (CONTIKIMAC_CCA_COUNT_MAX - 1))
-
-/* (usec) Tr, time required for a single CCA check */
-/* The CCA check should take exactly 8 symbols (128us), but the transceiver will
- * take some time to prepare for RX as well. */
-#define CONTIKIMAC_CCA_CHECK_TIME (256u)
-
-/* (usec) time for a complete CCA loop iteration */
-#define CONTIKIMAC_CCA_CYCLE_TIME (CONTIKIMAC_CCA_SLEEP_TIME + CONTIKIMAC_CCA_CHECK_TIME)
-
-/* (usec) maximum time to wait for the next packet in a burst */
-/* TODO implement burst reception */
-#define CONTIKIMAC_INTER_PACKET_DEADLINE (32000u)
-
-/* (usec) Maximum time to remain awake after a CCA detection */
-#define CONTIKIMAC_LISTEN_TIME_AFTER_PACKET_DETECTED (12500u)
-
-/* (usec) time for a complete channel check cycle with CONTIKIMAC_CCA_COUNT_MAX number of CCAs */
-#define CONTIKIMAC_TOTAL_CHECK_TIME (((CONTIKIMAC_CCA_COUNT_MAX) - 1) * (CONTIKIMAC_CCA_CYCLE_TIME) + (CONTIKIMAC_CCA_CHECK_TIME))
-
-/* (usec) Maximum time to keep retransmitting the same packet before giving up */
-#define CONTIKIMAC_STROBE_TIME ((CONTIKIMAC_CYCLE_TIME) + 2 * (CONTIKIMAC_TOTAL_CHECK_TIME))
-
-/* (usec) This is a small interval which is a lower limit on when to use xtimer
- * calls to trigger periodic events. If a period is less than this time then we
- * approximate it to 0 in some parts of the implementation */
-#define SMALL_INTERVAL (CONTIKIMAC_TX_PREAMBLE_TIME / 2)
-
 /* Size of message queue */
 #define CONTIKIMAC_MSG_QUEUE_SIZE 8
 
@@ -627,7 +523,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                     bool found = false;
                     xtimer_ticks32_t last_wakeup = xtimer_now();
 //                     LOG_ERROR("l: %lu\n", last_wakeup.ticks32);
-                    for (unsigned cca = CONTIKIMAC_CCA_COUNT_MAX; cca > 0; --cca) {
+                    for (unsigned cca = ctx.params->cca_count_max; cca > 0; --cca) {
                         netopt_enable_t channel_clear;
                         res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
                         if (res < 0) {
@@ -640,7 +536,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                             found = true;
                             break;
                         }
-                        xtimer_periodic_wakeup(&last_wakeup, CONTIKIMAC_CCA_CYCLE_TIME);
+                        xtimer_periodic_wakeup(&last_wakeup, ctx.params->cca_cycle_period);
                     }
 //                     LOG_ERROR("L: %lu\n", last_wakeup.ticks32);
                     if (found) {
@@ -662,7 +558,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                     }
                     /* Schedule the next wake up */
                     xtimer_periodic_msg(&ctx.timers.channel_check, &ctx.last_channel_check,
-                                        CONTIKIMAC_CYCLE_TIME,
+                                        ctx.params->channel_check_period,
                                         &msg_channel_check, thread_getpid());
                     break;
                 }
