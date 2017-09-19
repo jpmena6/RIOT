@@ -121,6 +121,13 @@
  * @c NETOPT_IS_CHANNEL_CLR, @c netdev_driver::send(), and @c NETOPT_STATE_TX are called while
  * the radio is in @c NETOPT_STATE_STANDBY.
  *
+ * ## Collision avoidance
+ *
+ * The implementation does not perform CCA checks before every retransmission,
+ * which may lead to collisions in crowded environments. The default timing
+ * parameters need to be adjusted if CSMA/CA is going to be enabled for the
+ * device.
+ *
  * ## Fast sleep
  *
  * During a wake up, the fast sleep implementation will perform additional
@@ -249,6 +256,46 @@
  * - @c after_ed_scan_interval <\f$T_i\f$, interval between CCA checks after detecting energy
  * - @c rx_timeout =\f$T_l\f$, time to transmit the longest possible frame
  *
+ * # Suggested topics for future improvements
+ *
+ * Some areas of improvement for this implementation are listed below.
+ *
+ * ## Collision avoidance
+ *
+ * Enabling CSMA/CA should be trivial, however, the timings need to account for
+ * the added latency on every retransmission. In particular, the backoff
+ * exponents (macMinBE, macMaxBE) should be reduced from their defaults (3, 5).
+ *
+ * The parameters @c cca_count_max, @c cca_cycle_period will need to be
+ * incremented to allow for a longer \f$T_i\f$.
+ * \f[T_i = \mathtt{inter\_packet\_interval} + T_{CSMA}\f]
+ *
+ * ## Phase lock optimization
+ *
+ * The phase of the Acked packet must be recorded and remembered for each
+ * unicast destination. For each unicast packet, the send function will then
+ * look up the registry for the correct timing to use for the particular
+ * destination.
+ *
+ * ## RX burst optimization
+ *
+ * The frame pending flag in the FCF must be checked on reception to determine
+ * if the radio should sleep immediately, or if a new timeout should be set.
+ *
+ * ## Automatic noise level calibration
+ *
+ * The CCA process is critical for the correct operation of the ContikiMAC
+ * protocol. If the CCA threshold is too low, then noise will trigger wake ups
+ * all the time, but the fast sleep optimization will put the radio back to
+ * sleep after the @c after_ed_scan_timeout interval has passed. If the CCA
+ * threshold is too high, then real frames will fail to be detected and the
+ * radio will be put back to sleep immediately. Both faults result in a failure
+ * to receive incoming frames.
+ *
+ * By measuring the RSSI level periodically it should be possible to dynamically
+ * adjust the CCA threshold to ensure the best possible chance of successfully
+ * detecting real incoming traffic.
+ *
  * @{
  *
  * @file
@@ -277,6 +324,16 @@ typedef struct {
      *
      * This is the interval between periodic wake ups for checking the channel
      * for energy.
+     *
+     * This time period is also used as the maximum time to keep strobing
+     * (retransmitting) outgoing packets.
+     *
+     * For unicast, this is the maximum time to keep retransmitting before
+     * giving up. Strobing will stop earlier if an Ack packet arrives before
+     * this time has passed.
+     *
+     * For broadcast/multicast, each packet will always be retransmitted until
+     * this time has passed.
      */
     uint32_t channel_check_period;
     /**
@@ -296,19 +353,6 @@ typedef struct {
      * after transmitting.
      */
     uint32_t inter_packet_interval;
-#if 0
-    /**
-     * @brief (usec) maximum time to strobe a TX packet
-     *
-     * For unicast, this is the maximum time to keep retransmitting before
-     * giving up. Strobing will stop earlier if an Ack packet arrives before
-     * this time has passed.
-     *
-     * For broadcast/multicast, each packet will always be retransmitted until
-     * this time has passed.
-     */
-    uint32_t strobe_time;
-#endif
     /**
      * @brief (usec) maximum time to scan for channel idle after an energy detection
      *
