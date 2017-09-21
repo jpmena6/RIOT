@@ -512,8 +512,10 @@ static void *_gnrc_contikimac_thread(void *arg)
                     xtimer_remove(&ctx.timers.timeout);
                     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
                     ctx.timeout_flag = false;
-                    /* Set a timeout for the currently in progress RX frame */
-                    xtimer_set(&ctx.timers.timeout, ctx.params->rx_timeout);
+                    if (!ctx.no_sleep) {
+                        /* Set a timeout for the currently in progress RX frame */
+                        xtimer_set(&ctx.timers.timeout, ctx.params->rx_timeout);
+                    }
                     DEBUG("RB\n");
                     break;
                 case CONTIKIMAC_MSG_TYPE_RX_END:
@@ -524,11 +526,17 @@ static void *_gnrc_contikimac_thread(void *arg)
                     xtimer_remove(&ctx.timers.timeout);
                     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
                     DEBUG("RE\n");
-                    gnrc_contikimac_radio_sleep(dev);
+                    if (!ctx.no_sleep) {
+                        gnrc_contikimac_radio_sleep(dev);
+                    }
                     TIMING_PRINTF("u: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
                     break;
                 case CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK:
                 {
+                    if (ctx.no_sleep) {
+                        break;
+                    }
+
                     if (ENABLE_TIMING_INFO) {
                         time_begin = xtimer_now_usec();
                     }
@@ -706,7 +714,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                     break;
             }
         }
-        if (flags & CONTIKIMAC_THREAD_FLAG_TICK) {
+        if (!ctx.no_sleep && (flags & CONTIKIMAC_THREAD_FLAG_TICK)) {
             gnrc_contikimac_tick(&ctx);
         }
     }
