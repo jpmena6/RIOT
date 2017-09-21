@@ -507,18 +507,22 @@ static void *_gnrc_contikimac_thread(void *arg)
             /* dispatch NETDEV and NETAPI messages */
             switch (msg.type) {
                 case CONTIKIMAC_MSG_TYPE_RX_BEGIN:
+                    if (ctx.no_sleep) {
+                        break;
+                    }
                     ctx.rx_in_progress = true;
                     xtimer_remove(&ctx.timers.tick);
                     xtimer_remove(&ctx.timers.timeout);
                     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
                     ctx.timeout_flag = false;
-                    if (!ctx.no_sleep) {
-                        /* Set a timeout for the currently in progress RX frame */
-                        xtimer_set(&ctx.timers.timeout, ctx.params->rx_timeout);
-                    }
+                    /* Set a timeout for the currently in progress RX frame */
+                    xtimer_set(&ctx.timers.timeout, ctx.params->rx_timeout);
                     DEBUG("RB\n");
                     break;
                 case CONTIKIMAC_MSG_TYPE_RX_END:
+                    if (ctx.no_sleep) {
+                        break;
+                    }
                     /* TODO process frame pending field */
                     ctx.rx_in_progress = false;
                     /* We received a packet, stop checking the channel and go back to sleep */
@@ -526,9 +530,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                     xtimer_remove(&ctx.timers.timeout);
                     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
                     DEBUG("RE\n");
-                    if (!ctx.no_sleep) {
-                        gnrc_contikimac_radio_sleep(dev);
-                    }
+                    gnrc_contikimac_radio_sleep(dev);
                     TIMING_PRINTF("u: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
                     break;
                 case CONTIKIMAC_MSG_TYPE_CHANNEL_CHECK:
@@ -628,6 +630,10 @@ static void *_gnrc_contikimac_thread(void *arg)
                     gnrc_netdev->send(gnrc_netdev, pkt);
                     gnrc_contikimac_send(&ctx, pkt);
                     /* Restore old state */
+                    if (old_state == NETOPT_STATE_RX) {
+                        /* go back to idle if old state was RX in progress */
+                        old_state = NETOPT_STATE_IDLE;
+                    }
                     res = dev->driver->set(dev, NETOPT_STATE, &old_state, sizeof(old_state));
                     if (res < 0) {
                         DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE %u: %d\n",
@@ -647,10 +653,14 @@ static void *_gnrc_contikimac_thread(void *arg)
                         case NETOPT_MAC_NO_SLEEP:
                             assert(opt->data_len >= sizeof(netopt_enable_t));
                             ctx.no_sleep = *((const netopt_enable_t *)opt->data);
+                            /* Reset the radio duty cycling state */
+                            xtimer_remove(&ctx.timers.tick);
+                            xtimer_remove(&ctx.timers.channel_check);
+                            ctx.rx_in_progress = false;
+                            ctx.seen_silence = false;
+                            ctx.timeout_flag = false;
+                            thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
                             if (ctx.no_sleep) {
-                                /* Disable radio duty cycling by killing the timers */
-                                xtimer_remove(&ctx.timers.tick);
-                                xtimer_remove(&ctx.timers.channel_check);
                                 /* switch the radio to listen state */
                                 res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
                                 if (res < 0) {
