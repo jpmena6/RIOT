@@ -13,7 +13,7 @@
  * @brief       GNRC ContikiMAC timing settings for O-QPSK 250 kbit/s
  *
  * These timings are valid for STD IEEE 802.15.4 channel page 0 in the 2.4 GHz
- * band, and channel page 1 in the 915 MHz band.
+ * band, and for channel page 2 in the 915 MHz band.
  *
  * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  * @}
@@ -21,13 +21,23 @@
 
 #include "net/gnrc/contikimac/contikimac.h"
 
+/* (usec) time to transmit one symbol */
+#define SYMBOL_TIME 16
+/* (usec) time to transmit one byte */
+#define BYTE_TIME (SYMBOL_TIME * 2)
+/* (usec) time to transmit the longest possible frame */
+#define LONGEST_FRAME_TIME (BYTE_TIME * (5 + 1 + 1 + 127))
+/* (usec) timeout waiting for Ack after TX complete */
+#define ACK_TIMEOUT (54 * SYMBOL_TIME)
+
+/* The added constants were picked arbitrarily */
 const contikimac_params_t contikimac_params_OQPSK250 = {
-    .channel_check_period = 1000000ul / 8, /* T_w, 8 Hz */
-    .cca_cycle_period = 54 * 16 / 2, /* T_c = T_i / (n_c - 1) */
-    .inter_packet_interval = 54 * 16, /* T_i = Ack timeout */
-    .after_ed_scan_timeout = 5000, /* > T_l */
-    .after_ed_scan_interval = 500, /* < T_i */
-    .listen_timeout = 54 * 16 + 1000, /* > T_i */
-    .rx_timeout = 4500, /* > T_l */
-    .cca_count_max = 3, /* = n_c */
+    .channel_check_period = 1000000ul / 8,             /* T_w, 8 Hz */
+    .cca_cycle_period = ACK_TIMEOUT / 2,               /* T_c = T_i / (n_c - 1) */
+    .inter_packet_interval = ACK_TIMEOUT,              /* T_i = Ack timeout */
+    .after_ed_scan_timeout = LONGEST_FRAME_TIME + 200, /* > T_l */
+    .after_ed_scan_interval = (ACK_TIMEOUT * 3) / 4,   /* < T_i */
+    .listen_timeout = ACK_TIMEOUT + 1000,              /* > T_i */
+    .rx_timeout = LONGEST_FRAME_TIME + 500,            /* > T_l */
+    .cca_count_max = 3,                                /* = n_c */
 };
