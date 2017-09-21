@@ -10,7 +10,10 @@
  * @{
  * @ingroup     net
  * @file
- * @brief       GNRC ContikiMAC main event loop
+ * @brief       GNRC ContikiMAC timing settings for O-QPSK 250 kbit/s
+ *
+ * These timings are valid for STD IEEE 802.15.4 channel page 0 in the 2.4 GHz
+ * band, and channel page 1 in the 915 MHz band.
  *
  * @author      Joakim Nohlgård <joakim.nohlgard@eistec.se>
  * @}
@@ -24,7 +27,7 @@ const contikimac_params_t contikimac_params_OQPSK250 = {
     .inter_packet_interval = 54 * 16, /* T_i = Ack timeout */
     .after_ed_scan_timeout = 5000, /* > T_l */
     .after_ed_scan_interval = 500, /* < T_i */
-    .listen_timeout = 54 * 16 + 2000, /* > T_i */
+    .listen_timeout = 54 * 16 + 1000, /* > T_i */
     .rx_timeout = 4500, /* > T_l */
-    .cca_count_max = 3, /* n_c */
+    .cca_count_max = 3, /* = n_c */
 };
