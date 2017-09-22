@@ -444,7 +444,7 @@ static void *_gnrc_contikimac_thread(void *arg)
 
     gnrc_netdev_t *gnrc_netdev = arg;
     contikimac_context_t ctx = {
-        .params = &contikimac_params_OQPSK250,
+        .params = NULL,
         .gnrc_netdev = gnrc_netdev,
         .timers = {
             .tick = {
@@ -464,7 +464,6 @@ static void *_gnrc_contikimac_thread(void *arg)
         .seen_silence = false,
         .channel_check_period = CONTIKIMAC_DEFAULT_CHANNEL_CHECK_PERIOD,
     };
-    thread_yield();
     ctx.thread = (thread_t *)thread_get(thread_getpid());
     ctx.timers.timeout.arg = &ctx;
     ctx.timers.tick.arg = ctx.thread;
@@ -493,6 +492,64 @@ static void *_gnrc_contikimac_thread(void *arg)
     dev->driver->init(dev);
 
     setup_netdev(dev);
+
+    do {
+        /* 802.15.4 channel and page determine which set of parameters we use */
+        uint16_t channel;
+        uint16_t page;
+        int res = dev->driver->get(dev, NETOPT_CHANNEL, &channel, sizeof(channel));
+        if (res < 0) {
+            break;
+        }
+        res = dev->driver->get(dev, NETOPT_CHANNEL_PAGE, &page, sizeof(page));
+        if (res < 0) {
+            /* Assume page = 0 if the device driver does not support NETOPT_CHANNEL_PAGE */
+            page = 0;
+        }
+        switch (page) {
+            case 0:
+                if (channel == IEEE802154_CHANNEL_MIN_SUBGHZ) {
+                    /* 868 MHz band, BPSK 20 kbit/s */
+                    DEBUG("gnrc_contikimac(%d): using timings for BPSK 20 kbit/s\n");
+                    ctx.params = &contikimac_params_BPSK20;
+                }
+                else if ((channel >= IEEE802154_CHANNEL_MIN_SUBGHZ) &&
+                         (channel <= IEEE802154_CHANNEL_MAX_SUBGHZ)) {
+                    /* 915 MHz band, BPSK 40 kbit/s */
+                    DEBUG("gnrc_contikimac(%d): using timings for BPSK 40 kbit/s\n");
+                    ctx.params = &contikimac_params_BPSK40;
+                }
+                else if ((channel >= IEEE802154_CHANNEL_MIN) &&
+                    (channel <= IEEE802154_CHANNEL_MAX)) {
+                    /* 2.4 GHz band, O-QPSK 250 kbit/s */
+                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 250 kbit/s\n");
+                    ctx.params = &contikimac_params_OQPSK250;
+                }
+                break;
+            case 2:
+                if (channel == IEEE802154_CHANNEL_MIN_SUBGHZ) {
+                    /* 868 MHz band, O-QPSK 100 kbit/s */
+                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 100 kbit/s\n");
+                    ctx.params = &contikimac_params_OQPSK100;
+                }
+                else if ((channel >= IEEE802154_CHANNEL_MIN_SUBGHZ) &&
+                         (channel <= IEEE802154_CHANNEL_MAX_SUBGHZ)) {
+                    /* 915 MHz band, O-QPSK 250 kbit/s */
+                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 250 kbit/s\n");
+                    ctx.params = &contikimac_params_OQPSK250;
+                }
+                break;
+                /* TODO handle more pages and bands */
+            default:
+                break;
+        }
+        if (ctx.params == NULL) {
+            LOG_ERROR("gnrc_contikimac(%d): No timing configuration exists "
+                "for page %u, channel %u. Fall back to timings for O-QPSK 250 kbit/s\n",
+                thread_getpid(), (unsigned int)page, (unsigned int)channel);
+            ctx.params = &contikimac_params_OQPSK250;
+        }
+    } while(0);
 
     ctx.last_channel_check = xtimer_now();
 
