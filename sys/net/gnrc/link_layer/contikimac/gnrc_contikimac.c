@@ -89,6 +89,7 @@ typedef struct {
     gnrc_netdev_t *gnrc_netdev;
     const contikimac_params_t *params;
     thread_t *thread;
+    uint32_t channel_check_period;
     xtimer_ticks32_t last_channel_check;
     xtimer_ticks32_t last_tick;
     struct {
@@ -261,7 +262,7 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
     ctx->timeout_flag = false;
     /* Set timeout for TX operation */
-    xtimer_set(&ctx->timers.timeout, ctx->params->channel_check_period + 2 * ctx->params->cca_cycle_period);
+    xtimer_set(&ctx->timers.timeout, ctx->channel_check_period + 2 * ctx->params->cca_cycle_period);
     while(!ctx->timeout_flag) {
         thread_flags_t txflags;
         if (do_transmit) {
@@ -459,6 +460,9 @@ static void *_gnrc_contikimac_thread(void *arg)
             },
         },
         .no_sleep = false,
+        .rx_in_progress = false,
+        .seen_silence = false,
+        .channel_check_period = CONTIKIMAC_DEFAULT_CHANNEL_CHECK_PERIOD,
     };
     thread_yield();
     ctx.thread = (thread_t *)thread_get(thread_getpid());
@@ -588,7 +592,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                     }
                     /* Schedule the next wake up */
                     xtimer_periodic_msg(&ctx.timers.channel_check, &ctx.last_channel_check,
-                                        ctx.params->channel_check_period,
+                                        ctx.channel_check_period,
                                         &msg_channel_check, thread_getpid());
                     break;
                 }
@@ -626,7 +630,6 @@ static void *_gnrc_contikimac_thread(void *arg)
                         DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_STANDBY: %d\n",
                               thread_getpid(), res);
                     }
-                    LOG_ERROR("TX\n");
                     gnrc_netdev->send(gnrc_netdev, pkt);
                     gnrc_contikimac_send(&ctx, pkt);
                     /* Restore old state */
