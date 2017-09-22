@@ -314,28 +314,33 @@
 extern "C" {
 #endif
 
+/**
+ * @brief (usec) Default time between wake ups
+ *
+ * This is the default interval between periodic wake ups for checking the
+ * channel for energy.
+ *
+ * This time period is also used as the maximum time to keep strobing
+ * (retransmitting) outgoing packets.
+ *
+ * For unicast, this is the maximum time to keep retransmitting before
+ * giving up. Strobing will stop earlier if an Ack packet arrives before
+ * this time has passed.
+ *
+ * For broadcast/multicast, each packet will always be retransmitted until
+ * this time has passed.
+ *
+ * This period can be changed at runtime by setting a new value for the
+ * NETOPT_MAC_CHECK_PERIOD setting.
+ */
+#ifndef CONTIKIMAC_DEFAULT_CHANNEL_CHECK_PERIOD
+#define CONTIKIMAC_DEFAULT_CHANNEL_CHECK_PERIOD (1000000ul / 8)
+#endif
 
 /**
  * @brief ContikiMAC configuration parameters
  */
 typedef struct {
-    /**
-     * @brief (usec) time between wake ups
-     *
-     * This is the interval between periodic wake ups for checking the channel
-     * for energy.
-     *
-     * This time period is also used as the maximum time to keep strobing
-     * (retransmitting) outgoing packets.
-     *
-     * For unicast, this is the maximum time to keep retransmitting before
-     * giving up. Strobing will stop earlier if an Ack packet arrives before
-     * this time has passed.
-     *
-     * For broadcast/multicast, each packet will always be retransmitted until
-     * this time has passed.
-     */
-    uint32_t channel_check_period;
     /**
      * @brief (usec) time between successive CCA checks during wake ups
      *
