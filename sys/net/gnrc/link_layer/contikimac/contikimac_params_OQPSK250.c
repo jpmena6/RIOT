@@ -32,7 +32,6 @@
 
 /* The added constants were picked arbitrarily */
 const contikimac_params_t contikimac_params_OQPSK250 = {
-    .channel_check_period = 1000000ul / 8,             /* T_w, 8 Hz */
     .cca_cycle_period = ACK_TIMEOUT / 2,               /* T_c = T_i / (n_c - 1) */
     .inter_packet_interval = ACK_TIMEOUT,              /* T_i = Ack timeout */
     .after_ed_scan_timeout = LONGEST_FRAME_TIME + 200, /* > T_l */
