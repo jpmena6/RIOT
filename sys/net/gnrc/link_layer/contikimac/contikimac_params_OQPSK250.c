@@ -33,8 +33,8 @@
 const contikimac_params_t contikimac_params_OQPSK250 = {
     .cca_cycle_period = ACK_TIMEOUT / 2,                /* T_c = T_i / (n_c - 1) */
     .inter_packet_interval = ACK_TIMEOUT,               /* T_i = Ack timeout */
-    .after_ed_scan_timeout = LONGEST_FRAME_TIME + 500,  /* > T_l */
-    .after_ed_scan_interval = (ACK_TIMEOUT * 3) / 4,    /* < T_i */
+    .after_ed_scan_timeout = LONGEST_FRAME_TIME + 2000, /* > T_l */
+    .after_ed_scan_interval = ACK_TIMEOUT / 4,          /* < T_i */
     .listen_timeout = ACK_TIMEOUT + 1000,               /* > T_i */
     .rx_timeout = LONGEST_FRAME_TIME + 500,             /* > T_l */
     .cca_count_max = 3,                                 /* = n_c */
