@@ -124,9 +124,10 @@ static void gnrc_contikimac_radio_sleep(netdev_t *dev);
  *
  * @pre Packet data has been preloaded
  *
- * @param[in]  dev  network device
+ * @param[in]  ctx        ContikiMAC context
+ * @param[in]  broadcast  set to true if the frame should use broadcast transmission rules
  */
-static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt);
+static void gnrc_contikimac_send(contikimac_context_t *ctx, bool broadcast);
 
 /**
  * @brief Periodic handler during wake times to determine when to go back to sleep
@@ -239,12 +240,9 @@ static void gnrc_contikimac_radio_sleep(netdev_t *dev)
     TIMING_PRINTF("r: %lu\n", (unsigned long)xtimer_now_usec() - time_begin);
 }
 
-static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
+static void gnrc_contikimac_send(contikimac_context_t *ctx, bool broadcast)
 {
     netdev_t *dev = ctx->gnrc_netdev->dev;
-    gnrc_netif_hdr_t *netif_hdr = pkt->data;
-    bool broadcast = ((netif_hdr->flags &
-        (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)));
 
     bool do_transmit = true;
     uint32_t time_before = 0;
@@ -318,6 +316,10 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, gnrc_pktsnip_t *pkt)
         /* Keep retransmitting until the strobe time has passed, or until we
          * receive an Ack. */
     }
+    xtimer_remove(&ctx->timers.timeout);
+    ctx->timeout_flag = false;
+    ctx->rx_in_progress = false;
+    ctx->seen_silence = false;
 }
 
 static void gnrc_contikimac_tick(contikimac_context_t *ctx)
@@ -664,42 +666,40 @@ static void *_gnrc_contikimac_thread(void *arg)
                     /* TODO enqueue packets */
                     DEBUG("gnrc_contikimac(%d): GNRC_NETAPI_MSG_TYPE_SND received\n",
                         thread_getpid());
-                    /* Hold until we are done */
                     gnrc_pktsnip_t *pkt = msg.content.ptr;
-                    gnrc_pktbuf_hold(pkt, 1);
-
-                    netopt_state_t old_state;
-                    int res = dev->driver->get(dev, NETOPT_STATE, &old_state, sizeof(old_state));
-                    if (res < 0) {
-                        DEBUG("gnrc_contikimac(%d): Failed getting NETOPT_STATE: %d\n",
-                              thread_getpid(), res);
-                    }
-                    /*
-                     * Go to standby before transmitting to avoid having incoming
+                    /* Go to standby before transmitting to avoid having incoming
                      * packets corrupt the frame buffer on single buffered
                      * transceivers (e.g. at86rf2xx). Also works around an issue
                      * on at86rf2xx where the frame buffer is lost after the
                      * first transmission because the driver puts the transceiver
-                     * in sleep mode.
-                     */
-                    res = dev->driver->set(dev, NETOPT_STATE, &state_standby, sizeof(state_standby));
+                     * in sleep mode. */
+                    int res = dev->driver->set(dev, NETOPT_STATE, &state_standby, sizeof(state_standby));
                     if (res < 0) {
                         DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_STANDBY: %d\n",
                               thread_getpid(), res);
                     }
+                    assert(pkt->type == GNRC_NETTYPE_NETIF);
+                    gnrc_netif_hdr_t *netif_hdr = pkt->data;
+                    assert(netif_hdr != NULL);
+                    bool broadcast = ((netif_hdr->flags &
+                        (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)));
+                    /* Preload the TX frame into the frame buffer */
                     gnrc_netdev->send(gnrc_netdev, pkt);
-                    gnrc_contikimac_send(&ctx, pkt);
-                    /* Restore old state */
-                    if (old_state == NETOPT_STATE_RX) {
-                        /* go back to idle if old state was RX in progress */
-                        old_state = NETOPT_STATE_IDLE;
+                    /* pkt is implicitly released by gnrc_netdev->send() */
+                    /* Perform the actual transmissions */
+                    gnrc_contikimac_send(&ctx, broadcast);
+                    /* The current RX cycle will have been disrupted by the TX,
+                     * switch back to sleep state */
+                    if (ctx.no_sleep) {
+                        res = dev->driver->set(dev, NETOPT_STATE, &state_listen, sizeof(state_listen));
+                        if (res < 0) {
+                            DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE_IDLE: %d\n",
+                                  thread_getpid(), res);
+                        }
                     }
-                    res = dev->driver->set(dev, NETOPT_STATE, &old_state, sizeof(old_state));
-                    if (res < 0) {
-                        DEBUG("gnrc_contikimac(%d): Failed setting NETOPT_STATE %u: %d\n",
-                              thread_getpid(), (unsigned)old_state, res);
+                    else {
+                        gnrc_contikimac_radio_sleep(dev);
                     }
-                    gnrc_pktbuf_release(pkt);
                     break;
                 }
                 case GNRC_NETAPI_MSG_TYPE_SET:
