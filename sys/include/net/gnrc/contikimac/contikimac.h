@@ -419,9 +419,24 @@ kernel_pid_t gnrc_contikimac_init(char *stack, int stacksize, char priority,
     const char *name, gnrc_netdev_t *dev);
 
 /**
- * @brief Default settings for O-QPSK 250 kbit/s
+ * @brief Default timing settings for O-QPSK 250 kbit/s
  */
 extern const contikimac_params_t contikimac_params_OQPSK250;
+
+/**
+ * @brief Default timing settings for O-QPSK 100 kbit/s
+ */
+extern const contikimac_params_t contikimac_params_OQPSK100;
+
+/**
+ * @brief Default timing settings for BPSK 40 kbit/s
+ */
+extern const contikimac_params_t contikimac_params_BPSK40;
+
+/**
+ * @brief Default timing settings for BPSK 20 kbit/s
+ */
+extern const contikimac_params_t contikimac_params_BPSK20;
 
 #ifdef __cplusplus
 }
