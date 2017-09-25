@@ -317,6 +317,8 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, bool broadcast)
          * receive an Ack. */
     }
     xtimer_remove(&ctx->timers.timeout);
+    /* Avoid race with the timeout timer setting the tick flag */
+    thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
     ctx->timeout_flag = false;
     ctx->rx_in_progress = false;
     ctx->seen_silence = false;
@@ -423,6 +425,7 @@ static void cb_set_tick_flag(void *arg)
 {
     thread_t *thread = arg;
     thread_flags_set(thread, CONTIKIMAC_THREAD_FLAG_TICK);
+    DEBUG("t\n");
 }
 
 static void cb_timeout(void *arg)
@@ -566,6 +569,9 @@ static void *_gnrc_contikimac_thread(void *arg)
             DEBUG("gnrc_contikimac(%d): ISR event\n", thread_getpid());
             dev->driver->isr(dev);
         }
+        if (!ctx.no_sleep && (flags & CONTIKIMAC_THREAD_FLAG_TICK)) {
+            gnrc_contikimac_tick(&ctx);
+        }
         while (msg_try_receive(&msg) > 0) {
             /* dispatch NETDEV and NETAPI messages */
             switch (msg.type) {
@@ -605,6 +611,9 @@ static void *_gnrc_contikimac_thread(void *arg)
                     if (ENABLE_TIMING_INFO) {
                         time_begin = xtimer_now_usec();
                     }
+                    xtimer_remove(&ctx.timers.tick);
+                    xtimer_remove(&ctx.timers.timeout);
+                    thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
                     DEBUG("gnrc_contikimac(%d): Checking channel\n", thread_getpid());
                     /* Perform multiple CCA and check the results */
                     /* This resets the tick sequence */
@@ -641,12 +650,14 @@ static void *_gnrc_contikimac_thread(void *arg)
                         ctx.seen_silence = false;
                         ctx.timeout_flag = false;
                         thread_flags_set(ctx.thread, CONTIKIMAC_THREAD_FLAG_TICK);
+                        DEBUG("D\n");
                         /* Set timeout in case we only detected noise */
                         xtimer_set(&ctx.timers.timeout, ctx.params->after_ed_scan_timeout);
                     }
                     else {
                         /* Nothing detected, immediately return to sleep */
                         DEBUG("gnrc_contikimac(%d): Nothing seen\n", thread_getpid());
+                        DEBUG("d\n");
                         gnrc_contikimac_radio_sleep(dev);
                     }
                     /* Schedule the next wake up */
@@ -783,9 +794,6 @@ static void *_gnrc_contikimac_thread(void *arg)
                         thread_getpid(), msg.type);
                     break;
             }
-        }
-        if (!ctx.no_sleep && (flags & CONTIKIMAC_THREAD_FLAG_TICK)) {
-            gnrc_contikimac_tick(&ctx);
         }
     }
     /* never reached */
