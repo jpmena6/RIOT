@@ -24,12 +24,15 @@
 #include "net/gcoap.h"
 #include "kernel_types.h"
 #include "shell.h"
+#include "net/gnrc/netif.h"
+#include "net/gnrc/netapi.h"
 
 #define MAIN_QUEUE_SIZE (4)
 static msg_t _main_msg_queue[MAIN_QUEUE_SIZE];
 
 extern int gcoap_cli_cmd(int argc, char **argv);
 extern void gcoap_cli_init(void);
+extern void gcoap_saul_init(void);
 
 static const shell_command_t shell_commands[] = {
     { "coap", "CoAP example", gcoap_cli_cmd },
@@ -41,7 +44,18 @@ int main(void)
     /* for the thread running the shell */
     msg_init_queue(_main_msg_queue, MAIN_QUEUE_SIZE);
     gcoap_cli_init();
+    gcoap_saul_init();
     puts("gcoap example app");
+
+    kernel_pid_t ifs[GNRC_NETIF_NUMOF];
+    size_t netif_numof = gnrc_netif_get(ifs);
+
+    if (netif_numof > 0) {
+        kernel_pid_t pid = ifs[0];
+        int16_t val = -65;
+        printf("Set CCA threshold to %d on interface %" PRIkernel_pid "\n", (int)val, pid);
+        gnrc_netapi_set(pid, NETOPT_CCA_THRESHOLD, 0, &val, sizeof(val));
+    }
 
     /* start shell */
     puts("All up, running the shell now");
