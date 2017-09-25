@@ -53,7 +53,10 @@ static const clock_config_t clock_config = {
     .select_fast_irc = true,
     .enable_mcgirclk = true, /* Used for LPUART clocking */
 };
-#define CLOCK_CORECLOCK              (32000000ul)
+/* Radio xtal frequency, either 32 MHz or 26 MHz */
+#define CLOCK_RADIOXTAL              (32000000ul)
+/* CPU core clock, the MCG clock output frequency */
+#define CLOCK_CORECLOCK              (CLOCK_RADIOXTAL)
 #define CLOCK_BUSCLOCK               (CLOCK_CORECLOCK / 2)
 #define CLOCK_MCGIRCLK               (4000000ul)
 /** @} */
