@@ -515,32 +515,37 @@ static void *_gnrc_contikimac_thread(void *arg)
             case 0:
                 if (channel == IEEE802154_CHANNEL_MIN_SUBGHZ) {
                     /* 868 MHz band, BPSK 20 kbit/s */
-                    DEBUG("gnrc_contikimac(%d): using timings for BPSK 20 kbit/s\n");
+                    DEBUG("gnrc_contikimac(%d): using timings for BPSK 20 kbit/s\n",
+                        thread_getpid());
                     ctx.params = &contikimac_params_BPSK20;
                 }
                 else if ((channel >= IEEE802154_CHANNEL_MIN_SUBGHZ) &&
                          (channel <= IEEE802154_CHANNEL_MAX_SUBGHZ)) {
                     /* 915 MHz band, BPSK 40 kbit/s */
-                    DEBUG("gnrc_contikimac(%d): using timings for BPSK 40 kbit/s\n");
+                    DEBUG("gnrc_contikimac(%d): using timings for BPSK 40 kbit/s\n",
+                        thread_getpid());
                     ctx.params = &contikimac_params_BPSK40;
                 }
                 else if ((channel >= IEEE802154_CHANNEL_MIN) &&
                     (channel <= IEEE802154_CHANNEL_MAX)) {
                     /* 2.4 GHz band, O-QPSK 250 kbit/s */
-                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 250 kbit/s\n");
+                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 250 kbit/s\n",
+                        thread_getpid());
                     ctx.params = &contikimac_params_OQPSK250;
                 }
                 break;
             case 2:
                 if (channel == IEEE802154_CHANNEL_MIN_SUBGHZ) {
                     /* 868 MHz band, O-QPSK 100 kbit/s */
-                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 100 kbit/s\n");
+                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 100 kbit/s\n",
+                        thread_getpid());
                     ctx.params = &contikimac_params_OQPSK100;
                 }
                 else if ((channel >= IEEE802154_CHANNEL_MIN_SUBGHZ) &&
                          (channel <= IEEE802154_CHANNEL_MAX_SUBGHZ)) {
                     /* 915 MHz band, O-QPSK 250 kbit/s */
-                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 250 kbit/s\n");
+                    DEBUG("gnrc_contikimac(%d): using timings for O-QPSK 250 kbit/s\n",
+                        thread_getpid());
                     ctx.params = &contikimac_params_OQPSK250;
                 }
                 break;
