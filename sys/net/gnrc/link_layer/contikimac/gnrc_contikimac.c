@@ -294,7 +294,11 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, bool broadcast)
                 /* For unicast, stop after receiving the first Ack */
                 if (!broadcast) {
                     TIMING_PRINTF("O: %lu\n", (unsigned long)xtimer_now_usec() - time_before);
-                    break;
+                    /* Cancel timeout */
+                    xtimer_remove(&ctx->timers.timeout);
+                    /* Avoid race with the timeout timer setting the tick flag */
+                    thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
+                    return;
                 }
                 /* For broadcast and multicast, always transmit for the full strobe
                  * duration, but wait for a short while before retransmitting */
@@ -316,12 +320,10 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, bool broadcast)
         /* Keep retransmitting until the strobe time has passed, or until we
          * receive an Ack. */
     }
+    /* Timeout flag was set */
     xtimer_remove(&ctx->timers.timeout);
     /* Avoid race with the timeout timer setting the tick flag */
     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
-    ctx->timeout_flag = false;
-    ctx->rx_in_progress = false;
-    ctx->seen_silence = false;
 }
 
 static void gnrc_contikimac_tick(contikimac_context_t *ctx)
@@ -488,7 +490,7 @@ static void *_gnrc_contikimac_thread(void *arg)
     dev->context = gnrc_netdev;
 
     /* Initialize the radio duty cycling by passing an initial event */
-    msg_send(&msg_channel_check, thread_getpid());
+    msg_send_to_self(&msg_channel_check);
 
     /* register the device to the network stack*/
     gnrc_netif_add(thread_getpid());
@@ -746,7 +748,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                             }
                             else {
                                 /* Start the radio duty cycling by passing an initial event */
-                                msg_send(&msg_channel_check, thread_getpid());
+                                msg_send_to_self(&msg_channel_check);
                                 ctx.last_channel_check = xtimer_now();
                             }
                             res = sizeof(netopt_enable_t);
