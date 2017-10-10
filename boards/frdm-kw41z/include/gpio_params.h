@@ -31,19 +31,29 @@ extern "C" {
  */
 static const  saul_gpio_params_t saul_gpio_params[] =
 {
+    /* These LEDs are marked on the board silkscreen with "LED3" for the red LED,
+     * and "LED4" for the RGB LED, hence the names for the SAUL actuators don't
+     * match the LEDx_PIN macros in board.h */
+    /* LED1 and LED2 on the board are wired to the target CPU reset pin, and the
+     * power supply line and are not software controllable */
     {
-        .name = "LED(red)",
+        .name = "LED3",
         .pin = LED0_PIN,
         .mode = GPIO_OUT
     },
     {
-        .name = "LED(green)",
+        .name = "LED4_R",
         .pin = LED1_PIN,
         .mode = GPIO_OUT
     },
     {
-        .name = "LED(blue)",
+        .name = "LED4_G",
         .pin = LED2_PIN,
+        .mode = GPIO_OUT
+    },
+    {
+        .name = "LED4_B",
+        .pin = LED3_PIN,
         .mode = GPIO_OUT
     },
     {

@@ -33,21 +33,26 @@ extern "C"
  * @brief   LED pin definitions and handlers
  * @{
  */
-#define LED0_PIN            GPIO_PIN(PORT_C,  1)
-#define LED0_MASK           (1 << 1)
-#define LED0_ON            (GPIOC->PCOR = LED0_MASK)
-#define LED0_OFF           (GPIOC->PSOR = LED0_MASK)
-#define LED0_TOGGLE        (GPIOC->PTOR = LED0_MASK)
-#define LED1_PIN            GPIO_PIN(PORT_A,  19)
-#define LED1_MASK           (1 << 19)
-#define LED1_ON            (GPIOA->PCOR = LED1_MASK)
-#define LED1_OFF           (GPIOA->PSOR = LED1_MASK)
-#define LED1_TOGGLE        (GPIOA->PTOR = LED1_MASK)
-#define LED2_PIN            GPIO_PIN(PORT_A,  18)
-#define LED2_MASK           (1 << 18)
+#define LED0_PIN            GPIO_PIN(PORT_B,  0)
+#define LED0_MASK           (1 << 0)
+#define LED0_ON            (GPIOB->PCOR = LED0_MASK)
+#define LED0_OFF           (GPIOB->PSOR = LED0_MASK)
+#define LED0_TOGGLE        (GPIOB->PTOR = LED0_MASK)
+#define LED1_PIN            GPIO_PIN(PORT_C,  1)
+#define LED1_MASK           (1 << 1)
+#define LED1_ON            (GPIOC->PCOR = LED1_MASK)
+#define LED1_OFF           (GPIOC->PSOR = LED1_MASK)
+#define LED1_TOGGLE        (GPIOC->PTOR = LED1_MASK)
+#define LED2_PIN            GPIO_PIN(PORT_A, 19)
+#define LED2_MASK           (1 << 19)
 #define LED2_ON            (GPIOA->PCOR = LED2_MASK)
 #define LED2_OFF           (GPIOA->PSOR = LED2_MASK)
 #define LED2_TOGGLE        (GPIOA->PTOR = LED2_MASK)
+#define LED3_PIN            GPIO_PIN(PORT_A, 18)
+#define LED3_MASK           (1 << 18)
+#define LED3_ON            (GPIOA->PCOR = LED3_MASK)
+#define LED3_OFF           (GPIOA->PSOR = LED3_MASK)
+#define LED3_TOGGLE        (GPIOA->PTOR = LED3_MASK)
 /** @} */
 
 /**
