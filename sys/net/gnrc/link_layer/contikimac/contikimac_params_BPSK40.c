@@ -28,7 +28,7 @@
 /* (usec) time to transmit the longest possible frame */
 #define LONGEST_FRAME_TIME (BYTE_TIME * (4 + 1 + 1 + 127))
 /* (usec) timeout waiting for Ack after TX complete */
-#define ACK_TIMEOUT (54 * SYMBOL_TIME)
+#define ACK_TIMEOUT (120 * SYMBOL_TIME)
 
 const contikimac_params_t contikimac_params_BPSK40 = {
     .cca_cycle_period = ACK_TIMEOUT / 2,                /* T_c = T_i / (n_c - 1) */
