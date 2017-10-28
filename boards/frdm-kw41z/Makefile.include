@@ -1,13 +1,13 @@
-# define the cpu used by the FRDM-K64F board
-export CPU = kw41z
+# define the cpu used by the board
+export CPU = kinetis
 export CPU_MODEL = mkw41z512vht4
-export CPU_FAMILY = klx
+
 # OpenOCD v0.10.0-dev (current development version) or later is required for
 # flashing KW41Z devices
 # See http://openocd.zylin.com/#/c/4104/ for the upstreaming process
 export USE_OLD_OPENOCD ?= 0
 # This board comes with OpenSDA configured for JLink compatibility
-export FRDM_IFACE ?= jlink
+export DEBUG_ADAPTER ?= jlink
 
 # Include default FRDM board config
 include $(RIOTBOARD)/frdm-common/Makefile.include
