@@ -144,7 +144,7 @@ WEAK_DEFAULT void isr_portb(void);
 WEAK_DEFAULT void isr_portc(void);
 WEAK_DEFAULT void isr_portd(void);
 WEAK_DEFAULT void isr_porte(void);
-WEAK_DEFAULT void isr_portbc(void);
+WEAK_DEFAULT void isr_portb_portc(void);
 WEAK_DEFAULT void isr_radio_0(void);
 WEAK_DEFAULT void isr_radio_1(void);
 WEAK_DEFAULT void isr_rng(void);
