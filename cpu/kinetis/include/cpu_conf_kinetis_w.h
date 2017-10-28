@@ -30,6 +30,17 @@
 #include "vendor/MKW22D5.h"
 #elif defined(CPU_MODEL_MKW24D512VHA5)
 #include "vendor/MKW24D5.h"
+#elif defined(CPU_MODEL_MKW21Z256VHT4) || \
+    defined(CPU_MODEL_MKW21Z512VHT4)
+#include "vendor/MKW21Z4.h"
+#elif defined(CPU_MODEL_MKW31Z256VHT4) || \
+    defined(CPU_MODEL_MKW31Z512CAT4) || \
+    defined(CPU_MODEL_MKW31Z512VHT4)
+#include "vendor/MKW31Z4.h"
+#elif defined(CPU_MODEL_MKW41Z256VHT4) || \
+    defined(CPU_MODEL_MKW41Z512CAT4) || \
+    defined(CPU_MODEL_MKW41Z512VHT4)
+#include "vendor/MKW41Z4.h"
 #endif
 
 /**
