@@ -1,1 +1,0 @@
-include $(KINETIS_COMMON)/Makefile.features
