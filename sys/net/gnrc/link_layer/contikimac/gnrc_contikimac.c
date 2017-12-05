@@ -287,16 +287,6 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, bool broadcast)
         /* TODO let the in progress RX frame finish before starting TX */
     }
     xtimer_remove(&ctx->timers.timeout);
-    /* Check that the channel is clear before starting strobe */
-    /* This check avoids problems where a reply sent in response to a broadcast
-     * transmission interrupts the broadcasting node and prevents other nodes
-     * from detecting the broadcast. The broadcasting node will also sometimes
-     * fail to receive the reply because it is still in strobe mode */
-    /* We avoid using CSMA on the actual TX operations below because it will add
-     * nondeterministic delays to the transmission and mess up the protocol timing */
-    while (gncr_contikimac_channel_energy_detect(ctx)) {
-        DEBUG("gnrc_contikimac(%d): wait for TX opportunity\n", thread_getpid());
-    }
     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
     ctx->timeout_flag = false;
     /* Set timeout for TX operation */
@@ -724,6 +714,17 @@ static void *_gnrc_contikimac_thread(void *arg)
                     assert(netif_hdr != NULL);
                     bool broadcast = ((netif_hdr->flags &
                         (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)));
+                    /* Check that the channel is clear before starting strobe */
+                    /* This check avoids problems where a reply sent in response to a broadcast
+                     * transmission interrupts the broadcasting node and prevents other nodes
+                     * from detecting the broadcast. The broadcasting node will also sometimes
+                     * fail to receive the reply because it is still in strobe mode */
+                    /* We avoid using CSMA on the actual TX operations below because it will add
+                     * nondeterministic delays to the transmission and mess up the protocol timing */
+                    while (gncr_contikimac_channel_energy_detect(&ctx)) {
+                        LOG_ERROR("TXW\n");
+                        DEBUG("gnrc_contikimac(%d): wait for TX opportunity\n", thread_getpid());
+                    }
                     /* Preload the TX frame into the frame buffer */
                     gnrc_netdev->send(gnrc_netdev, pkt);
                     /* pkt is implicitly released by gnrc_netdev->send() */
