@@ -466,7 +466,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                 .callback = cb_timeout,
             },
         },
-        .no_sleep = false,
+        .no_sleep = true,
         .rx_in_progress = false,
         .seen_silence = false,
         .channel_check_period = CONTIKIMAC_DEFAULT_CHANNEL_CHECK_PERIOD,
