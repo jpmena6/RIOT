@@ -249,11 +249,14 @@ static bool gncr_contikimac_channel_energy_detect(contikimac_context_t *ctx)
             break;
         }
         if (!channel_clear) {
+            DEBUG("C\n");
             /* Detected some radio energy on the channel */
             return true;
         }
+        DEBUG("c");
         xtimer_periodic_wakeup(&last_wakeup, ctx->params->cca_cycle_period);
     }
+    DEBUG("\n");
     return false;
 }
 
