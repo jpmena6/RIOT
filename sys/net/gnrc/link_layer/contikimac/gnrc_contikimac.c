@@ -227,6 +227,36 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt)
     }
 }
 
+/**
+ * @brief Check the channel to detect strobes
+ *
+ * This will perform up to @c cca_count_max CCA checks spaced @c cca_cycle_period
+ * us apart. If any check detects energy on the channel the function will return true.
+ *
+ * @return true if a transmission was detected
+ * @return false if none of the CCA checks detected any energy
+ */
+static bool gncr_contikimac_channel_energy_detect(contikimac_context_t *ctx)
+{
+    netdev_t *dev = ctx->gnrc_netdev->dev;
+    xtimer_ticks32_t last_wakeup = xtimer_now();
+    for (unsigned cca = ctx->params->cca_count_max; cca > 0; --cca) {
+        netopt_enable_t channel_clear;
+        int res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
+        if (res < 0) {
+            LOG_ERROR("gnrc_contikimac(%d): Failed getting NETOPT_IS_CHANNEL_CLR: %d\n",
+                thread_getpid(), res);
+            break;
+        }
+        if (!channel_clear) {
+            /* Detected some radio energy on the channel */
+            return true;
+        }
+        xtimer_periodic_wakeup(&last_wakeup, ctx->params->cca_cycle_period);
+    }
+    return false;
+}
+
 static void gnrc_contikimac_radio_sleep(netdev_t *dev)
 {
     static const netopt_state_t state_sleep = NETOPT_STATE_SLEEP;
@@ -257,6 +287,16 @@ static void gnrc_contikimac_send(contikimac_context_t *ctx, bool broadcast)
         /* TODO let the in progress RX frame finish before starting TX */
     }
     xtimer_remove(&ctx->timers.timeout);
+    /* Check that the channel is clear before starting strobe */
+    /* This check avoids problems where a reply sent in response to a broadcast
+     * transmission interrupts the broadcasting node and prevents other nodes
+     * from detecting the broadcast. The broadcasting node will also sometimes
+     * fail to receive the reply because it is still in strobe mode */
+    /* We avoid using CSMA on the actual TX operations below because it will add
+     * nondeterministic delays to the transmission and mess up the protocol timing */
+    while (gncr_contikimac_channel_energy_detect(ctx)) {
+        DEBUG("gnrc_contikimac(%d): wait for TX opportunity\n", thread_getpid());
+    }
     thread_flags_clear(CONTIKIMAC_THREAD_FLAG_TICK);
     ctx->timeout_flag = false;
     /* Set timeout for TX operation */
@@ -632,24 +672,7 @@ static void *_gnrc_contikimac_thread(void *arg)
                         break;
                     }
                     CONTIKIMAC_LED_ON;
-                    bool found = false;
-                    xtimer_ticks32_t last_wakeup = xtimer_now();
-                    for (unsigned cca = ctx.params->cca_count_max; cca > 0; --cca) {
-                        netopt_enable_t channel_clear;
-                        res = dev->driver->get(dev, NETOPT_IS_CHANNEL_CLR, &channel_clear, sizeof(channel_clear));
-                        if (res < 0) {
-                            LOG_ERROR("gnrc_contikimac(%d): Failed getting NETOPT_IS_CHANNEL_CLR: %d\n",
-                                thread_getpid(), res);
-                            break;
-                        }
-                        if (!channel_clear) {
-                            /* Detected some radio energy on the channel */
-                            found = true;
-                            break;
-                        }
-                        xtimer_periodic_wakeup(&last_wakeup, ctx.params->cca_cycle_period);
-                    }
-                    if (found) {
+                    if (gncr_contikimac_channel_energy_detect(&ctx)) {
                         /* Set the radio to listen for incoming packets */
                         DEBUG("gnrc_contikimac(%d): Detected, looking for silence\n", thread_getpid());
                         ctx.last_tick = xtimer_now();
