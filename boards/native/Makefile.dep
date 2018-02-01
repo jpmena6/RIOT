@@ -19,3 +19,13 @@ ifneq (,$(filter socket_zep,$(USEMODULE)))
   USEMODULE += checksum
   USEMODULE += random
 endif
+
+ifneq (,$(filter ztimer_usec,$(USEMODULE)))
+  USEMODULE += ztimer_periph
+endif
+
+ifneq (,$(filter ztimer_msec,$(USEMODULE)))
+  USEMODULE += ztimer_periph
+  USEMODULE += ztimer_convert
+  USEMODULE += ztimer_extend
+endif

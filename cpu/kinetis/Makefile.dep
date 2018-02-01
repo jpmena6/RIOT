@@ -4,3 +4,15 @@ endif
 ifneq (,$(filter periph_i2c,$(USEMODULE)))
   USEMODULE += core_thread_flags
 endif
+ifneq (,$(filter ztimer_usec,$(USEMODULE)))
+  USEMODULE += ztimer_periph
+endif
+ifneq (,$(filter ztimer_lp32k,$(USEMODULE)))
+  USEMODULE += ztimer_periph
+  USEMODULE += ztimer_extend
+endif
+ifneq (,$(filter ztimer_msec,$(USEMODULE)))
+  USEMODULE += ztimer_periph
+  USEMODULE += ztimer_convert
+  USEMODULE += ztimer_extend
+endif
