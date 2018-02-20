@@ -34,6 +34,7 @@ extern int hack2;
 int main(void)
 {
     unsigned n = XFA_LEN(xfatest_t, xfatest);
+    printf("XFA_LEN: %u\n", n);
     for (unsigned i = 0; i < n; i++) {
         printf("%u %s\n", xfatest[i].val, xfatest[i].text);
     }
