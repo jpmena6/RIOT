@@ -89,7 +89,7 @@ ifeq ($(shell uname -s),Darwin)
 else
   export LINKFLAGS += -Wl,--gc-sections
 endif
-export LINKFLAGS += -ffunction-sections
+export LINKFLAGS += -ffunction-sections -fdata-sections
 
 # set the tap interface for term/valgrind
 ifneq (,$(filter netdev_default gnrc_netdev_default,$(USEMODULE)))

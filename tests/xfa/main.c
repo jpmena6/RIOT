@@ -35,6 +35,9 @@ int main(void)
 {
     unsigned n = XFA_LEN(xfatest_t, xfatest);
     printf("XFA_LEN: %u\n", n);
+    printf("hack1: %d\n", hack1);
+    printf("hack2: %d\n", hack2);
+    hack1 = *((int*)&_xfa_xfatest[0]);
     for (unsigned i = 0; i < n; i++) {
         printf("%u %s\n", xfatest[i].val, xfatest[i].text);
     }
