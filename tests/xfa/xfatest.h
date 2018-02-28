@@ -4,6 +4,7 @@
 typedef struct {
     unsigned val;
     const char *text;
+    void (*fptr)(void);
 } xfatest_t;
 
 #endif /* XFATEST_H */

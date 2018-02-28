@@ -319,10 +319,12 @@ else
 link: ..compiler-check ..build-message $(RIOTBUILD_CONFIG_HEADER_C) $(USEPKG:%=${BINDIR}/%.a) $(APPDEPS)
 	$(Q)DIRS="$(DIRS)" "$(MAKE)" -C $(APPDIR) -f $(RIOTMAKE)/application.inc.mk
 ifeq (,$(RIOTNOLINK))
+	$(PREFIX)ld -T$(RIOTBASE)/xfa.ld --gc-sections --entry=xfatest -r -o xfaexp.o $(UNDEF)
+	$(OBJCOPY) -O binary --only-section=.xfa xfaexp.o xfabin.o
 ifeq ($(BUILDOSXNATIVE),1)
 	$(Q)$(if $(CPPMIX),$(CXX),$(LINK)) $(UNDEF) -o $(ELFFILE) $$(find $(BASELIBS) -size +8c) $(LINKFLAGS) $(LINKFLAGPREFIX)-no_pie
 else
-	$(Q)$(_LINK) -o $(ELFFILE)
+	$(Q)$(_LINK) -v -o $(ELFFILE)
 endif
 	$(Q)$(SIZE) $(ELFFILE)
 	$(Q)$(OBJCOPY) $(OFLAGS) $(ELFFILE) $(HEXFILE)
