@@ -310,7 +310,7 @@ LINKFLAGPREFIX ?= -Wl,
 
 DIRS += $(EXTERNAL_MODULE_DIRS)
 
-_LINK = $(if $(CPPMIX),$(CXX),$(LINK)) $(UNDEF) $(LINKFLAGPREFIX)--start-group $(BASELIBS) -lm $(LINKFLAGPREFIX)--end-group  $(LINKFLAGPREFIX)-Map=$(BINDIR)/$(APPLICATION).map $(LINKFLAGS)
+_LINK = $(if $(CPPMIX),$(CXX),$(LINK)) xfaexp.o $(UNDEF) $(LINKFLAGPREFIX)--start-group $(BASELIBS) -lm $(LINKFLAGPREFIX)--end-group  $(LINKFLAGPREFIX)-Map=$(BINDIR)/$(APPLICATION).map $(LINKFLAGS)
 
 ifeq ($(BUILD_IN_DOCKER),1)
 link: ..in-docker-container
@@ -319,7 +319,8 @@ else
 link: ..compiler-check ..build-message $(RIOTBUILD_CONFIG_HEADER_C) $(USEPKG:%=${BINDIR}/%.a) $(APPDEPS)
 	$(Q)DIRS="$(DIRS)" "$(MAKE)" -C $(APPDIR) -f $(RIOTMAKE)/application.inc.mk
 ifeq (,$(RIOTNOLINK))
-	$(PREFIX)ld -T$(RIOTBASE)/xfa.ld --gc-sections --entry=xfatest -r -o xfaexp.o $(UNDEF)
+	$(PREFIX)ld -T$(RIOTBASE)/xfa.ld --warn-unresolved-symbols -e xfatest --gc-sections -r -o xfaexp.o $(UNDEF)
+	for f in $(UNDEF); do $(OBJCOPY) '--remove-section=.xfa*' "$$f"; done
 	$(OBJCOPY) -O binary --only-section=.xfa xfaexp.o xfabin.o
 ifeq ($(BUILDOSXNATIVE),1)
 	$(Q)$(if $(CPPMIX),$(CXX),$(LINK)) $(UNDEF) -o $(ELFFILE) $$(find $(BASELIBS) -size +8c) $(LINKFLAGS) $(LINKFLAGPREFIX)-no_pie
