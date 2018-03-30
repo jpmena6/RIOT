@@ -24,6 +24,7 @@
 
 #include "periph/timer.h"
 #include "cpu.h"
+#include "t64.h"
 #if TEST_XTIMER
 #include "xtimer.h"
 #endif
@@ -244,7 +245,7 @@ extern "C" {
 #if TEST_XTIMER
 #define READ_TUT() _xtimer_now()
 #else
-#define READ_TUT() timer_read(TIM_TEST_DEV)
+#define READ_TUT() t64_now()
 #endif
 
 #ifdef __cplusplus

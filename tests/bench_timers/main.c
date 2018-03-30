@@ -35,6 +35,7 @@
 #if TEST_XTIMER
 #include "xtimer.h"
 #endif
+#include "t64.h"
 
 #include "board.h"
 #include "cpu.h"
@@ -485,27 +486,27 @@ static void run_test(test_ctx_t *ctx, uint32_t interval, unsigned int variant)
 
     spin_random_delay();
     if (variant & TEST_RESCHEDULE) {
-        timer_set(TIM_TEST_DEV, TIM_TEST_CHAN, interval + RESCHEDULE_MARGIN);
+        t64_set(interval + RESCHEDULE_MARGIN);
         spin_random_delay();
     }
     if (variant & TEST_STOPPED) {
-        timer_stop(TIM_TEST_DEV);
+        t64_stop();
         spin_random_delay();
     }
     ctx->target_ref = timer_read(TIM_REF_DEV) + interval_ref;
     ctx->target_tut = READ_TUT() + interval;
     if (variant & TEST_ABSOLUTE) {
-        timer_set_absolute(TIM_TEST_DEV, TIM_TEST_CHAN, ctx->target_tut);
+        t64_set_absolute(ctx->target_tut);
     }
     else {
-        timer_set(TIM_TEST_DEV, TIM_TEST_CHAN, interval);
+        t64_set(interval);
     }
     if (variant & TEST_STOPPED) {
         spin_random_delay();
         /* do not update ctx->target_tut, because TUT should have been stopped
          * and not incremented during spin_random_delay */
         ctx->target_ref = timer_read(TIM_REF_DEV) + interval_ref;
-        timer_start(TIM_TEST_DEV);
+        t64_start();
     }
     mutex_lock(&mtx_cb);
 }
@@ -720,7 +721,7 @@ int main(void)
     random_init(seed);
 
 #if !(TEST_XTIMER)
-    res = timer_init(TIM_TEST_DEV, TIM_TEST_FREQ, cb_timer_periph, &test_context);
+    res = t64_init(TIM_TEST_FREQ, cb, &test_context);
     if (res < 0) {
         print_str("Error ");
         print_s32_dec(res);
