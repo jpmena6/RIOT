@@ -68,7 +68,7 @@ void t64_set_or_split(void)
             unsigned int after = timer_read((T64_DEV));
             if (after < before) {
                 /* Overflow occurred while setting the timeout, abort and retry */
-                timer_clear(T64_DEV);
+                timer_clear(T64_DEV, T64_CHAN);
                 t64_state.base += (T64_LOWER_PERIOD);
                 continue;
             }
@@ -77,7 +77,7 @@ void t64_set_or_split(void)
             /* Set real target */
             t64_state.awaiting_overflow = 0;
             /* discard top bits and compute lower timer target phase */
-            unsigned int lower_target = ((unsigned int)t64_state.target) - ((unsigned int)t64_state.base)
+            unsigned int lower_target = ((unsigned int)t64_state.target) - ((unsigned int)t64_state.base);
             unsigned int before = timer_read((T64_DEV));
             unsigned int timeout = lower_target - before;
             timer_set((T64_DEV), (T64_CHAN), timeout);
@@ -106,6 +106,14 @@ static void t64_cb(void *arg, int chan)
         t64_state.base += (T64_LOWER_PERIOD);
         t64_set_or_split();
     }
+    else {
+        /* Target was hit */
+        t64_state.target = 0;
+        t64_set_or_split();
+        if (t64_state.cb) {
+            t64_state.cb(t64_state.arg);
+        }
+    }
 }
 
 int t64_init(unsigned long freq, t64_cb_t cb, void *arg)
@@ -116,9 +124,14 @@ int t64_init(unsigned long freq, t64_cb_t cb, void *arg)
     t64_state.base = 0;
     t64_state.target = 0;
 
-    timer_init((T64_DEV), freq, t64_cb, &t64_state);
+    int res = timer_init((T64_DEV), freq, t64_cb, &t64_state);
+    if (res < 0) {
+        irq_restore(mask);
+        return res;
+    }
     t64_set_or_split();
     irq_restore(mask);
+    return 0;
 }
 
 void t64_stop(void)
