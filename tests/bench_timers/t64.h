@@ -25,9 +25,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef T64_DEV
-#define T64_DEV (TIMER_DEV(1))
-#endif
 
 /**
  * @brief   Signature of timeout callback function

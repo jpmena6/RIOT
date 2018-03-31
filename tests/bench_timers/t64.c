@@ -23,6 +23,11 @@
 #include "t64.h"
 #include "irq.h"
 #include "periph/timer.h"
+#include "bench_periph_timer_config.h"
+
+#define ENABLE_DEBUG 1
+#include "debug.h"
+#include "fmt.h"
 
 #ifndef T64_DEV
 #define T64_DEV (TIMER_DEV(0))
@@ -30,11 +35,19 @@
 #ifndef T64_CHAN
 #define T64_CHAN (0)
 #endif
-#ifndef T64_LOWER_PERIOD
-#define T64_LOWER_PERIOD ((uint64_t)0x100000000ull)
-#endif
+/* Maximum settable timeout for the lower level timer */
 #ifndef T64_LOWER_MAX
-#define T64_LOWER_MAX (T64_LOWER_PERIOD - 1)
+#define T64_LOWER_MAX (0xffffffff)
+#endif
+/* Partition size, must be a power of two */
+#define T64_PARTITION (((T64_LOWER_MAX) >> 11) + 1)
+/* in-partition volatile bits */
+#define T64_PARTITION_MASK ((T64_PARTITION - 1))
+/* Minimum relative timeout, used when the target has been missed */
+#define T64_MIN_REL 1
+
+#ifndef T64_TRACE
+#define T64_TRACE   0
 #endif
 
 typedef struct {
@@ -42,34 +55,87 @@ typedef struct {
     uint64_t target;
     t64_cb_t cb;
     void *arg;
-    unsigned awaiting_overflow;
+    unsigned int lower_partition;
+    unsigned int awaiting_overflow;
 } t64_state_t;
 
 t64_state_t t64_state;
 
 /**
- * @brief   Set next low level timer timeout
+ * @brief   Check for partition transitions and update base accordingly
+ */
+void t64_update_partition(unsigned int now)
+{
+    if ((now ^ t64_state.lower_partition) >= (T64_PARTITION)) {
+        /* timer count has passed from one partition to the next, update base */
+        t64_state.base += (T64_PARTITION);
+        t64_state.lower_partition = (t64_state.lower_partition + (T64_PARTITION)) & (T64_LOWER_MAX);
+        if (T64_TRACE) {
+            print_str("next ");
+            print_u32_hex(now);
+            print_str(" ");
+            print_u32_hex(t64_state.lower_partition);
+            print_str(" ");
+            print_u64_hex(t64_state.base);
+        }
+    }
+}
+
+/**
+ * @brief   Set next low level timer timeout and update base if necessary
  *
- * This will set the real target timer if it is within the same period as the
+ * This will set the real target timer if it is within the same partition as the
  * current time, or set an overflow timeout otherwise.
  *
  * @pre IRQ disabled
  */
-void t64_set_or_split(void)
+void t64_update_timeouts(unsigned int before)
 {
     /* Keep trying until we manage to set a timer */
     while(1) {
-        if ((t64_state.target == 0) ||
-            ((t64_state.base ^ t64_state.target) > T64_LOWER_PERIOD)) {
-            /* Timer overflow will occur before the target time, or no target set */
+        t64_update_partition(before);
+        if ((t64_state.target != 0) && (t64_state.target < (t64_state.base + (before & (T64_PARTITION_MASK))))) {
+            if (T64_TRACE) {
+                print_str("<<<z ");
+                print_u64_hex(t64_state.target);
+                print_str(" ");
+                print_u64_hex(t64_state.base + (before & (T64_PARTITION_MASK)));
+                print_str(" ");
+                print_u64_hex(t64_state.base);
+                print_str("\n");
+            }
+            /* Target is in the past */
+            t64_state.awaiting_overflow = 0;
+            /* We can't run the callback immediately because we want to enforce
+             * the masked interrupts */
+            timer_set(T64_DEV, T64_CHAN, T64_MIN_REL);
+        }
+        else if ((t64_state.target == 0) ||
+            ((t64_state.base ^ t64_state.target) >= (T64_PARTITION))) {
+            /* Timer partition overflow will occur before the target time, or no target set */
             t64_state.awaiting_overflow = 1;
-            unsigned int before = timer_read((T64_DEV));
-            timer_set_absolute((T64_DEV), (T64_CHAN), (T64_LOWER_MAX));
-            unsigned int after = timer_read((T64_DEV));
-            if (after < before) {
-                /* Overflow occurred while setting the timeout, abort and retry */
+            /* There is a danger of setting an absolute timer target in the low
+             * level timer since we might run past the target before the timer
+             * has been updated with the new target time */
+            timer_set_absolute(T64_DEV, (T64_CHAN),
+                (T64_PARTITION_MASK) | (t64_state.lower_partition & (T64_PARTITION)));
+            unsigned int after = timer_read(T64_DEV);
+            if (0&&T64_TRACE) {
+                print_str("part ");
+                print_u32_hex(before);
+                print_str(" ");
+                print_u32_hex(after);
+                print_str(" ");
+                print_u64_hex(t64_state.base);
+                print_str(" ");
+                print_u64_hex(t64_state.target);
+                print_str("\n");
+            }
+            if ((before ^ after) >= (T64_PARTITION)) {
+                /* Partition transition occurred while setting the timeout, abort and retry */
                 timer_clear(T64_DEV, T64_CHAN);
-                t64_state.base += (T64_LOWER_PERIOD);
+                before = after;
+                /* try again */
                 continue;
             }
         }
@@ -78,13 +144,20 @@ void t64_set_or_split(void)
             t64_state.awaiting_overflow = 0;
             /* discard top bits and compute lower timer target phase */
             unsigned int lower_target = ((unsigned int)t64_state.target) - ((unsigned int)t64_state.base);
-            unsigned int before = timer_read((T64_DEV));
-            unsigned int timeout = lower_target - before;
-            timer_set((T64_DEV), (T64_CHAN), timeout);
-            unsigned int after = timer_read((T64_DEV));
-            if (after < before) {
-                /* Overflow occurred while setting the timeout, increment base */
-                t64_state.base += (T64_LOWER_PERIOD);
+            unsigned int timeout = (lower_target - before) & (T64_PARTITION_MASK);
+            timer_set(T64_DEV, T64_CHAN, timeout);
+            if (0&&T64_TRACE) {
+                print_str("targ ");
+                print_u32_hex(before);
+                print_str(" ");
+                print_u32_hex(lower_target);
+                print_str(" ");
+                print_u32_hex(timeout);
+                print_str(" ");
+                print_u64_hex(t64_state.base);
+                print_str(" ");
+                print_u64_hex(t64_state.target);
+                print_str("\n");
             }
         }
         break; /* timer was set OK */
@@ -101,18 +174,16 @@ static void t64_cb(void *arg, int chan)
 {
     (void)arg;
     (void)chan;
+    unsigned int now = timer_read(T64_DEV);
+    t64_update_partition(now);
 
-    if (t64_state.awaiting_overflow) {
-        t64_state.base += (T64_LOWER_PERIOD);
-        t64_set_or_split();
-    }
-    else {
+    if (!t64_state.awaiting_overflow) {
         /* Target was hit */
         t64_state.target = 0;
-        t64_set_or_split();
         if (t64_state.cb) {
             t64_state.cb(t64_state.arg);
         }
+        t64_update_timeouts(now);
     }
 }
 
@@ -123,13 +194,14 @@ int t64_init(unsigned long freq, t64_cb_t cb, void *arg)
     t64_state.arg = arg;
     t64_state.base = 0;
     t64_state.target = 0;
+    t64_state.lower_partition = 0;
 
-    int res = timer_init((T64_DEV), freq, t64_cb, &t64_state);
+    int res = timer_init(T64_DEV, freq, t64_cb, &t64_state);
     if (res < 0) {
         irq_restore(mask);
         return res;
     }
-    t64_set_or_split();
+    t64_update_timeouts(0);
     irq_restore(mask);
     return 0;
 }
@@ -146,14 +218,21 @@ void t64_start(void)
 
 uint64_t t64_now(void)
 {
-    return (t64_state.base + timer_read(T64_DEV));
+    unsigned mask = irq_disable();
+    unsigned int now = timer_read(T64_DEV);
+    t64_update_partition(now);
+    uint64_t ret = (t64_state.base + (now & (T64_PARTITION_MASK)));
+    irq_restore(mask);
+    return ret;
 }
 
 void t64_set(uint32_t timeout)
 {
     unsigned mask = irq_disable();
-    t64_state.target = t64_now() + timeout;
-    t64_set_or_split();
+    uint64_t now = t64_now();
+    t64_state.target = now + timeout;
+    /* Reuse the now value to avoid redundant timer_read calls */
+    t64_update_timeouts(now & (T64_LOWER_MAX));
     irq_restore(mask);
 }
 
@@ -161,6 +240,6 @@ void t64_set_absolute(uint64_t target)
 {
     unsigned mask = irq_disable();
     t64_state.target = target;
-    t64_set_or_split();
+    t64_update_timeouts(timer_read(T64_DEV));
     irq_restore(mask);
 }
