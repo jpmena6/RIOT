@@ -97,7 +97,7 @@ typedef struct {
     matstat_state_t *ref_state; /* timer_set error statistics state */
     matstat_state_t *int_state; /* timer_read error statistics state */
     unsigned int target_ref; /* Target time in reference timer */
-    unsigned int target_tut; /* Target time in timer under test */
+    uint64_t target_tut; /* Target time in timer under test */
 } test_ctx_t;
 
 static test_ctx_t test_context;
