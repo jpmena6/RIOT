@@ -38,7 +38,7 @@
 #endif
 /* Maximum settable timeout for the lower level timer */
 #ifndef T64_LOWER_MAX
-#define T64_LOWER_MAX (0xffffffff)
+#define T64_LOWER_MAX (0xfffffffful)
 #endif
 /* Partition size, must be a power of two */
 #define T64_PARTITION (((T64_LOWER_MAX) >> 15) + 1)
@@ -97,13 +97,17 @@ void t64_update_timeouts(unsigned int before)
 {
     /* Keep trying until we manage to set a timer */
     while(1) {
+        /* Keep the base offset up to date */
         t64_update_partition(before);
         if (!t64_state.needs_update) {
+            /* Early exit to avoid unnecessary 64 bit target time computations */
             break;
         }
         if ((t64_state.target != 0) && (t64_state.target <= (t64_state.base + (before & (T64_PARTITION_MASK))))) {
             if (T64_TRACE) {
                 print_str("<<<z ");
+                print_u32_hex(before);
+                print_str(" ");
                 print_u64_hex(t64_state.target);
                 print_str(" ");
                 print_u64_hex(t64_state.base + (before & (T64_PARTITION_MASK)));
@@ -172,8 +176,9 @@ void t64_update_timeouts(unsigned int before)
                 print_str("\n");
             }
         }
+        /* timer was set OK */
         t64_state.needs_update = 0;
-        break; /* timer was set OK */
+        break;
     }
 }
 
@@ -187,6 +192,9 @@ static void t64_cb(void *arg, int chan)
 {
     (void)arg;
     (void)chan;
+    if (T64_TRACE) {
+        print_str("t64cb\n");
+    }
     unsigned int now = timer_read(T64_DEV);
     t64_state.needs_update = 1;
 
