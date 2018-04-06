@@ -255,6 +255,7 @@ void t64_set(uint32_t timeout)
 {
     unsigned mask = irq_disable();
     unsigned int now = timer_read(T64_DEV);
+    t64_update_partition(now);
     t64_state.target = (t64_state.base + (now & (T64_PARTITION_MASK))) + timeout;
     t64_state.needs_update = 1;
     /* Reuse the now value to avoid redundant timer_read calls */
