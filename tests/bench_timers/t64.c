@@ -38,10 +38,15 @@
 #endif
 /* Maximum settable timeout for the lower level timer */
 #ifndef T64_LOWER_MAX
-#define T64_LOWER_MAX (0xfffffffful)
+#define T64_LOWER_MAX (0xfffful)
 #endif
-/* Partition size, must be a power of two */
-#define T64_PARTITION (((T64_LOWER_MAX) >> 17) + 1)
+#ifdef T64_LOWER_TYPE
+typedef T64_LOWER_TYPE t64_lower_t;
+#else
+typedef unsigned int t64_lower_t;
+#endif
+/* Partition size, must be a power of two and less than T64_LOWER_MAX */
+#define T64_PARTITION (((T64_LOWER_MAX) >> 4) + 1)
 /* in-partition volatile bits */
 #define T64_PARTITION_MASK ((T64_PARTITION - 1))
 /* Minimum relative timeout, used when the target has been missed */
@@ -59,7 +64,7 @@ typedef struct {
     uint64_t target;
     t64_cb_t cb;
     void *arg;
-    unsigned int partition;
+    t64_lower_t partition;
     unsigned int needs_update;
 } t64_state_t;
 
@@ -68,9 +73,9 @@ t64_state_t t64_state;
 /**
  * @brief   Check for partition transitions and update base accordingly
  */
-static void t64_checkpoint(unsigned int now)
+static void t64_checkpoint(t64_lower_t now)
 {
-    unsigned int partition = now & ~(T64_PARTITION_MASK);
+    t64_lower_t partition = now & ~(T64_PARTITION_MASK);
     if (partition != t64_state.partition) {
         if (T64_TRACE) {
             print_str("next ");
@@ -83,9 +88,9 @@ static void t64_checkpoint(unsigned int now)
             print_u64_hex(t64_state.base);
             print("\n", 1);
         }
-        t64_state.base += partition - t64_state.partition;
+        t64_state.base += (partition - t64_state.partition) & (T64_LOWER_MAX);
         t64_state.partition = partition;
-        assert(((unsigned int)t64_state.base) == t64_state.partition);
+        assert(t64_state.partition == (((t64_lower_t)t64_state.base) & (T64_LOWER_MAX)));
     }
 }
 
@@ -97,7 +102,7 @@ static void t64_checkpoint(unsigned int now)
  *
  * @pre IRQ disabled
  */
-static void t64_update_timeouts(unsigned int before)
+static void t64_update_timeouts(t64_lower_t before)
 {
     /* Keep trying until we manage to set a timer */
     while(1) {
@@ -108,7 +113,7 @@ static void t64_update_timeouts(unsigned int before)
             break;
         }
         uint64_t now64 = t64_state.base + (before & (T64_PARTITION_MASK));
-        if (t64_state.target < now64) {
+        if (t64_state.target <= now64) {
             if (T64_TRACE) {
                 print_str("<<<z ");
                 print_u32_hex(before);
@@ -128,10 +133,10 @@ static void t64_update_timeouts(unsigned int before)
             before = timer_read(T64_DEV);
             continue;
         }
-        unsigned int lower_target;
+        t64_lower_t lower_target;
         if ((t64_state.target - now64) >= (T64_PARTITION)) {
             /* The real target is more than one partition duration away */
-            lower_target = before + (T64_PARTITION);
+            lower_target = (before + (T64_PARTITION)) & (T64_LOWER_MAX);
             if (T64_TRACE) {
                 print_str("part ");
             }
@@ -139,7 +144,7 @@ static void t64_update_timeouts(unsigned int before)
         else {
             /* Set real target */
             /* discard top bits and compute lower timer target phase */
-            lower_target = (unsigned int)t64_state.target;
+            lower_target = (t64_lower_t)t64_state.target & (T64_LOWER_MAX);
             if (T64_TRACE) {
                 print_str("real ");
             }
@@ -148,7 +153,7 @@ static void t64_update_timeouts(unsigned int before)
          * level timer since we might run past the target before the timer
          * has been updated with the new target time */
         timer_set_absolute(T64_DEV, (T64_CHAN), lower_target);
-        unsigned int after = timer_read(T64_DEV);
+        t64_lower_t after = timer_read(T64_DEV);
         if (T64_TRACE) {
             print_u32_hex(before);
             print_str(" ");
@@ -163,7 +168,7 @@ static void t64_update_timeouts(unsigned int before)
             print_u64_hex(t64_state.target);
             print_str("\n");
         }
-        if ((lower_target - before) < (after - before)) {
+        if ((lower_target - before) <= (after - before)) {
             /* We passed the target while setting the timeout, abort and retry */
             timer_clear(T64_DEV, T64_CHAN);
             before = after;
