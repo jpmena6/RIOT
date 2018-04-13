@@ -38,7 +38,7 @@
 #endif
 /* Maximum settable timeout for the lower level timer */
 #ifndef T64_LOWER_MAX
-#define T64_LOWER_MAX (0xfffful)
+#define T64_LOWER_MAX (0xfffffffful)
 #endif
 #ifdef T64_LOWER_TYPE
 typedef T64_LOWER_TYPE t64_lower_t;
@@ -46,7 +46,7 @@ typedef T64_LOWER_TYPE t64_lower_t;
 typedef unsigned int t64_lower_t;
 #endif
 /* Partition size, must be a power of two and less than T64_LOWER_MAX */
-#define T64_PARTITION (((T64_LOWER_MAX) >> 4) + 1)
+#define T64_PARTITION (((T64_LOWER_MAX) >> 20) + 1)
 /* in-partition volatile bits */
 #define T64_PARTITION_MASK ((T64_PARTITION - 1))
 /* Minimum relative timeout, used when the target has been missed */
@@ -66,6 +66,7 @@ typedef struct {
     void *arg;
     t64_lower_t partition;
     unsigned int needs_update;
+    unsigned int started;
 } t64_state_t;
 
 t64_state_t t64_state;
@@ -149,11 +150,14 @@ static void t64_update_timeouts(t64_lower_t before)
                 print_str("real ");
             }
         }
-        /* There is a danger of setting an absolute timer target in the low
-         * level timer since we might run past the target before the timer
-         * has been updated with the new target time */
         timer_set_absolute(T64_DEV, (T64_CHAN), lower_target);
-        t64_lower_t after = timer_read(T64_DEV);
+        t64_lower_t after = 0;
+        if (t64_state.started) {
+            /* There is a danger of setting an absolute timer target in the low
+             * level timer since we might run past the target before the timer
+             * has been updated with the new target time */
+            after = timer_read(T64_DEV);
+        }
         if (T64_TRACE) {
             print_u32_hex(before);
             print_str(" ");
@@ -168,16 +172,18 @@ static void t64_update_timeouts(t64_lower_t before)
             print_u64_hex(t64_state.target);
             print_str("\n");
         }
-        if ((lower_target - before) <= (after - before)) {
-            /* We passed the target while setting the timeout, abort and retry */
-            timer_clear(T64_DEV, T64_CHAN);
-            before = after;
-            /* try again */
-            t64_state.needs_update = 1;
-            if (T64_TRACE) {
-                print_str("retry\n");
+        if (t64_state.started) {
+            if ((lower_target - before) <= (after - before)) {
+                /* We passed the target while setting the timeout, abort and retry */
+                timer_clear(T64_DEV, T64_CHAN);
+                before = after;
+                /* try again */
+                t64_state.needs_update = 1;
+                if (T64_TRACE) {
+                    print_str("retry\n");
+                }
+                continue;
             }
-            continue;
         }
         /* timer was set OK */
         t64_state.needs_update = 0;
@@ -211,6 +217,7 @@ int t64_init(unsigned long freq, t64_cb_t cb, void *arg)
     t64_state.target = T64_TARGET_UNSET;
     t64_state.partition = 0;
     t64_state.needs_update = 1;
+    t64_state.started = 1;
 
     int res = timer_init(T64_DEV, freq, t64_cb, &t64_state);
     if (res < 0) {
@@ -224,12 +231,18 @@ int t64_init(unsigned long freq, t64_cb_t cb, void *arg)
 
 void t64_stop(void)
 {
+    unsigned mask = irq_disable();
+    t64_state.started = 0;
     timer_stop(T64_DEV);
+    irq_restore(mask);
 }
 
 void t64_start(void)
 {
+    unsigned mask = irq_disable();
+    t64_state.started = 1;
     timer_start(T64_DEV);
+    irq_restore(mask);
 }
 
 uint64_t t64_now(void)
