@@ -38,59 +38,69 @@ typedef void (*t64_cb_t)(void *arg);
  *
  * The timer will be started automatically after initialization.
  *
- * @param[in] freq          requested number of ticks per second
- * @param[in] cb            this callback is called in interrupt context, the
- *                          emitting channel is passed as argument
- * @param[in] arg           argument to the callback
+ * @param[in]   idx     t64 instance number
+ * @param[in]   freq    requested number of ticks per second
+ * @param[in]   cb      the callback that will be called every time the timer expires
+ * @param[in]   arg     argument to the callback
  *
- * @return                  0 on success
- * @return                  <0 on error
+ * @return              0 on success
+ * @return              <0 on error
  */
-int t64_init(unsigned long freq, t64_cb_t cb, void *arg);
+int t64_init(unsigned int idx, unsigned long freq, t64_cb_t cb, void *arg);
 
 /**
  * @brief   Stop the timer
+ *
+ * @param[in]   idx     t64 instance number
  */
-void t64_stop(void);
+void t64_stop(unsigned int idx);
 
 /**
  * @brief   Start the timer
  *
  * @note this is only necessary if the timer was stopped before, the timer is
  *       always running after initialization.
+ *
+ * @param[in]   idx     t64 instance number
  */
-void t64_start(void);
+void t64_start(unsigned int idx);
 
 /**
  * @brief   Get the current count on the 64 bit virtual timer
  *
+ * @param[in]   idx     t64 instance number
+ *
  * @return  the current counter value
  */
-uint64_t t64_now(void);
+uint64_t t64_now(unsigned int idx);
 
 /**
  * @brief   Set a timer target relative to the current time
  *
+ * @param[in]   idx     t64 instance number
  * @param[in]   timeout relative timeout
  */
-void t64_set(uint32_t timeout);
+void t64_set(unsigned int idx, uint32_t timeout);
 
 /**
  * @brief   Set an absolute timer target
  *
+ * @param[in]   idx     t64 instance number
  * @param[in]   target  absolute target
  */
-void t64_set_absolute(uint64_t target);
+void t64_set_absolute(unsigned int idx, uint64_t target);
 
 /**
  * @brief   Clear the current timeout
  *
  * The timer will be kept running if already running, but the current timeout
  * will be cleared.
+ *
+ * @param[in]   idx     t64 instance number
  */
-static inline void t64_clear(void)
+static inline void t64_clear(unsigned int idx)
 {
-    t64_set_absolute(0);
+    t64_set_absolute(idx, 0);
 }
 
 #ifdef __cplusplus
