@@ -122,6 +122,7 @@ static t64_state_t t64_state[T64_NUMOF];
  */
 static void t64_checkpoint(unsigned int idx, t64_lower_t now)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
     t64_lower_t partition = now & ~(params->partition_mask);
@@ -153,6 +154,7 @@ static void t64_checkpoint(unsigned int idx, t64_lower_t now)
  */
 static void t64_update_timeouts(unsigned int idx, t64_lower_t before)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
     /* Keep trying until we manage to set a timer */
@@ -262,6 +264,7 @@ static void t64_cb(void *arg, int chan)
 
 int t64_init(unsigned int idx, unsigned long freq, t64_cb_t cb, void *arg)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
     unsigned mask = irq_disable();
@@ -285,6 +288,7 @@ int t64_init(unsigned int idx, unsigned long freq, t64_cb_t cb, void *arg)
 
 void t64_stop(unsigned int idx)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
 
@@ -296,6 +300,7 @@ void t64_stop(unsigned int idx)
 
 void t64_start(unsigned int idx)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
 
@@ -307,6 +312,7 @@ void t64_start(unsigned int idx)
 
 uint64_t t64_now(unsigned int idx)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
 
@@ -320,6 +326,7 @@ uint64_t t64_now(unsigned int idx)
 
 void t64_set(unsigned int idx, uint32_t timeout)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
 
@@ -335,6 +342,7 @@ void t64_set(unsigned int idx, uint32_t timeout)
 
 void t64_set_absolute(unsigned int idx, uint64_t target)
 {
+    assert(idx < T64_NUMOF);
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
 
