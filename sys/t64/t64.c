@@ -34,22 +34,6 @@ typedef T64_LOWER_TYPE t64_lower_t;
 #else
 typedef unsigned int t64_lower_t;
 #endif
-#ifndef T64_DEV
-#define T64_DEV (TIMER_DEV(0))
-#endif
-#ifndef T64_CHAN
-#define T64_CHAN (0)
-#endif
-
-#ifndef T64_LOWER_MAX
-#define T64_LOWER_MAX (0xfffffffful)
-#endif
-/* Partition size, must be a power of two and less than T64_LOWER_MAX */
-#define T64_PARTITION (((T64_LOWER_MAX) >> 20) + 1)
-/* in-partition volatile bits */
-#define T64_PARTITION_MASK ((T64_PARTITION - 1))
-/* Minimum relative timeout, used when the target has been missed */
-#define T64_MIN_REL 1
 
 #ifndef T64_TRACE
 #define T64_TRACE   0
