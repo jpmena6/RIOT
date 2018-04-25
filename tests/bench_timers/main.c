@@ -486,27 +486,27 @@ static void run_test(test_ctx_t *ctx, uint32_t interval, unsigned int variant)
 
     spin_random_delay();
     if (variant & TEST_RESCHEDULE) {
-        t64_set(interval + RESCHEDULE_MARGIN);
+        t64_set(T64_IDX, interval + RESCHEDULE_MARGIN);
         spin_random_delay();
     }
     if (variant & TEST_STOPPED) {
-        t64_stop();
+        t64_stop(T64_IDX);
         spin_random_delay();
     }
     ctx->target_ref = timer_read(TIM_REF_DEV) + interval_ref;
     ctx->target_tut = READ_TUT() + interval;
     if (variant & TEST_ABSOLUTE) {
-        t64_set_absolute(ctx->target_tut);
+        t64_set_absolute(T64_IDX, ctx->target_tut);
     }
     else {
-        t64_set(interval);
+        t64_set(T64_IDX, interval);
     }
     if (variant & TEST_STOPPED) {
         spin_random_delay();
         /* do not update ctx->target_tut, because TUT should have been stopped
          * and not incremented during spin_random_delay */
         ctx->target_ref = timer_read(TIM_REF_DEV) + interval_ref;
-        t64_start();
+        t64_start(T64_IDX);
     }
     mutex_lock(&mtx_cb);
 }
@@ -721,7 +721,7 @@ int main(void)
     random_init(seed);
 
 #if !(TEST_XTIMER)
-    res = t64_init(TIM_TEST_FREQ, cb, &test_context);
+    res = t64_init(T64_IDX, TIM_TEST_FREQ, cb, &test_context);
     if (res < 0) {
         print_str("Error ");
         print_s32_dec(res);

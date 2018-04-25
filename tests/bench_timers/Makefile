@@ -24,6 +24,7 @@ USEMODULE += random
 USEMODULE += fmt
 USEMODULE += matstat
 USEMODULE += xtimer
+USEMODULE += t64
 
 ifeq (,$(findstring TIM_TEST_DEV,$(CFLAGS)))
   ifneq (,$(filter $(BOARD),$(SINGLE_TIMER_BOARDS)))
