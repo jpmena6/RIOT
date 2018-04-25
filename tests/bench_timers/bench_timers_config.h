@@ -245,7 +245,11 @@ extern "C" {
 #if TEST_XTIMER
 #define READ_TUT() _xtimer_now()
 #else
-#define READ_TUT() t64_now()
+#ifndef T64_IDX
+#define T64_IDX 0
+#endif
+
+#define READ_TUT() t64_now(T64_IDX)
 #endif
 
 #ifdef __cplusplus
