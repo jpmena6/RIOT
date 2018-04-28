@@ -9,8 +9,50 @@
 /**
  * @defgroup  sys_t64 T64 timer extender
  * @ingroup   sys
- * @brief     Extends a 16 bit or 32 bit timer to a 64 bit virtual timer.
+ * @brief     Extends a hardware timer to a 64 bit virtual timer.
  *
+ * Provides a monotonic 64 bit timer by wrapping a hardware timer, which can be
+ * of any width, using checkpointed interval partitioning.
+ *
+ * ### Theory of operation
+ *
+ * The hardware timer range is split into multiple equal length intervals called
+ * partitions. The hardware timer target is never scheduled further into the
+ * future than the length of one partition, this prevents the ambiguity in how
+ * the software should interpret read timer values in relation to setting timer
+ * targets.
+ *
+ * An internal state struct is used to keep track of the 64 bit timer target,
+ * some internal flags, and the 64 bit offset from the hardware timer.
+ *
+ * #### Checkpointing
+ *
+ * A checkpoint is updated every time the hardware timer is read by the library.
+ * The 64 bit timer offset is updated whenever the hardware timer transitions
+ * into a new partition.
+ *
+ * #### Long timeouts
+ *
+ * When a timer target is requested which is further than one partition duration
+ * in the future, the t64 wrapper will set successive partition length timeouts
+ * on the hardware timer until the target is within one partition from the
+ * current time.
+ *
+ * #### Past targets
+ *
+ * When a timer target is requested to a time in the past, the callback will be
+ * immediately called, without setting a hardware timer.
+ *
+ * #### Race conditions
+ *
+ * An extra check is made after setting a hardware timer to ensure that the
+ * current time did not pass the timer target while setting the hardware timer.
+ * When this occurs, it is impossible for the library to know whether the
+ * hardware timer did catch the target or if the time had already passed the
+ * target when the hardware timer target was updated.
+ * If the library detects that the target was passed while setting the target,
+ * the timer target will be cleared and the callback function will be called
+ * directly from the T64 library instead of from the timer ISR.
  *
  * @{
  * @file
