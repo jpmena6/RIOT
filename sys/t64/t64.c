@@ -25,65 +25,33 @@
 #include "irq.h"
 #include "periph/timer.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 #include "debug.h"
 #include "fmt.h"
 
-#ifdef T64_LOWER_TYPE
-typedef T64_LOWER_TYPE t64_lower_t;
-#else
-typedef unsigned int t64_lower_t;
-#endif
-
 #ifndef T64_TRACE
+/* Set to 1 to show detailed debug information */
 #define T64_TRACE   0
 #endif
 
-/* Target value for unset timers */
+/** Target value for unset timers, should not be reachable within reasonable limits */
 #define T64_TARGET_UNSET (~0ull) /* == at overflow, a few millenia from now */
 
 typedef struct {
-    /**
-     * @brief   Timer device to use
-     */
-    tim_t dev;
-    /**
-     * @brief   Timer channel to use
-     *
-     * Use 0 if unsure
-     */
-    int channel;
-    /**
-     * @brief   Partition size, must be a power of two
-     */
-    t64_lower_t partition_size;
-    /**
-     * @brief   Bit mask for the counter bits inside the partition
-     *
-     * set this to `partition_size - 1`
-     */
-    t64_lower_t partition_mask;
-    /**
-     * @brief   Maximum settable timeout for the lower level timer
-     */
-    t64_lower_t lower_max;
-} t64_params_t;
-
-typedef struct {
-    uint64_t base;
-    uint64_t target;
-    t64_cb_t cb;
-    void *arg;
-    t64_lower_t partition;
-    unsigned int needs_update;
-    unsigned int started;
+    uint64_t base; /**< Base offset */
+    uint64_t target; /**< Timer target */
+    t64_cb_t cb; /**< Callback function pointer */
+    void *arg; /**< argument to callback function */
+    t64_lower_t partition; /**< Current partition */
+    bool needs_update; /**< flag indicating that the hardware timer target needs updating */
+    bool started; /**< flag indicating if the timer is running or not */
 } t64_state_t;
 
 #ifndef T64_NUMOF
 #define T64_NUMOF 1
 #endif
 #ifndef T64_PARAMS
-#define T64_PARAMS (const t64_params_t[]){ \
+#define T64_PARAMS (const t64_params_t[T64_NUMOF]){ \
     { \
     .dev            = TIMER_DEV(0), \
     .channel        = 0, \
@@ -104,11 +72,8 @@ static t64_state_t t64_state[T64_NUMOF];
  * @param[in]   idx     T64 timer index
  * @param[in]   now     'now' time (from @ref timer_read())
  */
-static void t64_checkpoint(unsigned int idx, t64_lower_t now)
+static void t64_checkpoint(t64_state_t *state, const t64_params_t *params, t64_lower_t now)
 {
-    assert(idx < T64_NUMOF);
-    const t64_params_t *params = &t64_params[idx];
-    t64_state_t *state = &t64_state[idx];
     t64_lower_t partition = now & ~(params->partition_mask);
     if (partition != state->partition) {
         if (T64_TRACE) {
@@ -136,15 +101,12 @@ static void t64_checkpoint(unsigned int idx, t64_lower_t now)
  *
  * @pre IRQ disabled
  */
-static void t64_update_timeouts(unsigned int idx, t64_lower_t before)
+static void t64_update_timeouts(t64_state_t *state, const t64_params_t *params, t64_lower_t before)
 {
-    assert(idx < T64_NUMOF);
-    const t64_params_t *params = &t64_params[idx];
-    t64_state_t *state = &t64_state[idx];
     /* Keep trying until we manage to set a timer */
     while(1) {
         /* Keep the base offset up to date */
-        t64_checkpoint(idx, before);
+        t64_checkpoint(state, params, before);
         if (!state->needs_update) {
             /* Early exit to avoid unnecessary 64 bit target time computations */
             break;
@@ -243,7 +205,7 @@ static void t64_cb(void *arg, int chan)
     }
     unsigned int now = timer_read(params->dev);
     state->needs_update = 1;
-    t64_update_timeouts(idx, now);
+    t64_update_timeouts(state, params, now);
 }
 
 int t64_init(unsigned int idx, unsigned long freq, t64_cb_t cb, void *arg)
@@ -263,9 +225,18 @@ int t64_init(unsigned int idx, unsigned long freq, t64_cb_t cb, void *arg)
     int res = timer_init(params->dev, freq, t64_cb, (void *)idx);
     if (res < 0) {
         irq_restore(mask);
+        if (ENABLE_DEBUG) {
+            print_str("T64: timer_init(");
+            print_u32_dec(params->dev);
+            print_str(", ");
+            print_u32_dec(freq);
+            print_str(", ...) failed: ");
+            print_s32_dec(res);
+            print_str("\n");
+        }
         return res;
     }
-    t64_update_timeouts(idx, timer_read(params->dev));
+    t64_update_timeouts(state, params, timer_read(params->dev));
     irq_restore(mask);
     return 0;
 }
@@ -280,6 +251,11 @@ void t64_stop(unsigned int idx)
     state->started = 0;
     timer_stop(params->dev);
     irq_restore(mask);
+    if (ENABLE_DEBUG) {
+        print_str("T64: stop ");
+        print_u32_dec(idx);
+        print_str("\n");
+    }
 }
 
 void t64_start(unsigned int idx)
@@ -288,6 +264,11 @@ void t64_start(unsigned int idx)
     const t64_params_t *params = &t64_params[idx];
     t64_state_t *state = &t64_state[idx];
 
+    if (ENABLE_DEBUG) {
+        print_str("T64: start ");
+        print_u32_dec(idx);
+        print_str("\n");
+    }
     unsigned mask = irq_disable();
     state->started = 1;
     timer_start(params->dev);
@@ -302,7 +283,7 @@ uint64_t t64_now(unsigned int idx)
 
     unsigned mask = irq_disable();
     unsigned int now = timer_read(params->dev);
-    t64_checkpoint(idx, now);
+    t64_checkpoint(state, params, now);
     uint64_t ret = (state->base + (now & params->partition_mask));
     irq_restore(mask);
     return ret;
@@ -316,11 +297,11 @@ void t64_set(unsigned int idx, uint32_t timeout)
 
     unsigned mask = irq_disable();
     unsigned int now = timer_read(params->dev);
-    t64_checkpoint(idx, now);
+    t64_checkpoint(state, params, now);
     state->target = (state->base + (now & params->partition_mask)) + timeout;
     state->needs_update = 1;
     /* Reuse the now value to avoid redundant timer_read calls */
-    t64_update_timeouts(idx, now);
+    t64_update_timeouts(state, params, now);
     irq_restore(mask);
 }
 
@@ -333,6 +314,6 @@ void t64_set_absolute(unsigned int idx, uint64_t target)
     unsigned mask = irq_disable();
     state->target = target;
     state->needs_update = 1;
-    t64_update_timeouts(idx, timer_read(params->dev));
+    t64_update_timeouts(state, params, timer_read(params->dev));
     irq_restore(mask);
 }

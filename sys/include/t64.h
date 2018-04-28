@@ -63,6 +63,7 @@
 #define T64_H
 
 #include <stdint.h>
+#include "periph/timer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,6 +75,47 @@ extern "C" {
  * @param[in] arg       optional context for the callback
  */
 typedef void (*t64_cb_t)(void *arg);
+
+/**
+ * @brief   Counter data type for the underlying timer
+ */
+#ifdef T64_LOWER_TYPE
+typedef T64_LOWER_TYPE t64_lower_t;
+#else
+typedef unsigned int t64_lower_t;
+#endif
+
+/**
+ * @brief   T64 configuration parameters
+ */
+typedef struct {
+    /**
+     * @brief   Timer device to use
+     */
+    tim_t dev;
+    /**
+     * @brief   Timer channel to use
+     *
+     * Use 0 if unsure
+     */
+    int channel;
+    /**
+     * @brief   Maximum settable timeout for the lower level timer
+     */
+    t64_lower_t lower_max;
+    /**
+     * @brief   Partition size, must be a power of two
+     *
+     * Suggested value: `(lower_max >> 2) + 1`
+     */
+    t64_lower_t partition_size;
+    /**
+     * @brief   Bit mask for the counter bits inside the partition
+     *
+     * Set this to `partition_size - 1`
+     */
+    t64_lower_t partition_mask;
+} t64_params_t;
 
 /**
  * @brief   Initialize the t64 library and the underlying hardware timer
