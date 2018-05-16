@@ -53,20 +53,15 @@ int main(void)
     }
 
     while (1) {
-        printf("Tacho:");
-        for (unsigned k = 1; k <= 1; ++k) {
-            printf("  %u: ", k);
-            unsigned count = 0;
-            uint32_t duration = 0;
-            tacho_read(&tacho, k, &count, &duration);
-            if (duration == 0) {
-                printf("  -NaN- ");
-                continue;
-            }
-            unsigned long rpm = ((uint64_t)count * 60000000ul) / duration;
-            printf("%8lu", rpm);
+        printf("Tacho: ");
+        unsigned count = 0;
+        uint32_t duration = 1000000ul;
+        tacho_read(&tacho, &count, &duration);
+        unsigned long rpm = 0;
+        if (duration > 0) {
+            rpm = ((uint64_t)count * 60000000ul) / duration;
         }
-        puts("");
+        printf("%8lu BPM\n", rpm);
 
         xtimer_usleep(SLEEP);
     }

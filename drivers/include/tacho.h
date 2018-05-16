@@ -79,21 +79,32 @@ typedef struct {
 int tacho_init(tacho_t *dev, const tacho_params_t *params);
 
 /**
- * @brief   Get sum of the last n tacho readings as a fraction
+ * @brief   Get sum of the last tacho readings as a fraction
  *
- * This will return the sum of the last @p n filled tacho buffers, yielding a
- * form of moving average.
+ * This will return a form of moving average over the last @p duration
+ * microseconds. @p duration will be updated with the actual duration of the
+ * measurement.
  *
- * Computing RPM:
+ * The function will iterate over the last readings until the sum of the
+ * durations is equal to or greater than the value pointed to by @p duration.
  *
- *     rpm = ((uint64_t)count * 60000000ul) / duration;
+ * Computing average RPM over the last 100 ms:
  *
- * @param[in]   dev         device descriptor of sensor
- * @param[in]   n           number of buffers to use
- * @param[out]  count       pulse count
- * @param[out]  duration    duration for the count, in microseconds
+ *     uint32_t duration = 100 * US_PER_MS;
+ *     unsigned count = 0;
+ *     tacho_read(dev, &count, &duration);
+ *     if (duration > 0) {
+ *         rpm = ((uint64_t)count * 60000000ul) / duration;
+ *     }
+ *     else {
+ *         rpm = 0;
+ *     }
+ *
+ * @param[in]       dev         device descriptor of sensor
+ * @param[out]      count       pulse count output
+ * @param[in, out]  duration    duration for the count, in microseconds
  */
-void tacho_read(const tacho_t *dev, unsigned n, unsigned *count, uint32_t *duration);
+void tacho_read(const tacho_t *dev, unsigned *count, uint32_t *duration);
 
 #ifdef __cplusplus
 }

@@ -63,20 +63,20 @@ int tacho_init(tacho_t *dev, const tacho_params_t *params)
     return 0;
 }
 
-void tacho_read(const tacho_t *dev, unsigned n, unsigned *count, uint32_t *duration)
+void tacho_read(const tacho_t *dev, unsigned *count, uint32_t *duration)
 {
-    if (n > dev->num_bufs) {
-        n = dev->num_bufs;
-    }
-    if (n == 0) {
-        *count = 0;
+    unsigned idx = dev->idx;
+    xtimer_ticks32_t now = xtimer_now();
+    if ((*duration) < xtimer_usec_from_ticks(xtimer_diff(now, dev->bufs[idx].time_end))) {
+        /* no pulses detected within the duration */
         *duration = 0;
+        *count = 0;
         return;
     }
+    unsigned n = dev->num_bufs;
     unsigned sum_count = 0;
     uint32_t sum_duration = 0;
-    unsigned idx = (dev->num_bufs + dev->idx - 1) % dev->num_bufs;
-    while (n > 0) {
+    while ((n > 0) && (sum_duration < (*duration))) {
         tacho_interval_t *ival = &dev->bufs[idx];
         sum_count += ival->count;
         sum_duration += xtimer_usec_from_ticks(xtimer_diff(ival->time_end, ival->time_start));
