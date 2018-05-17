@@ -55,7 +55,7 @@ int main(void)
     while (1) {
         printf("Tacho: ");
         unsigned count = 0;
-        uint32_t duration = 1000000ul;
+        uint32_t duration = 3000000ul;
         tacho_read(&tacho, &count, &duration);
         unsigned long rpm = 0;
         if (duration > 0) {
