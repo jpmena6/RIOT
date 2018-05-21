@@ -73,29 +73,30 @@ int tacho_init(tacho_t *dev, const tacho_params_t *params)
 
 void tacho_read(const tacho_t *dev, unsigned *count, uint32_t *duration)
 {
-    unsigned idx = dev->idx;
-    xtimer_ticks32_t now = xtimer_now();
-    xtimer_ticks32_t diff = xtimer_diff(now, dev->bufs[idx].time_end);
-    if ((*duration) < xtimer_usec_from_ticks(diff)) {
-        /* no pulses detected within the duration */
-        *duration = 0;
-        *count = 0;
-        return;
-    }
-    unsigned n = dev->num_bufs;
     unsigned sum_count = 0;
     uint32_t sum_duration = 0;
-    if (xtimer_less(dev->min_duration, diff)) {
-        /* A long time since the last tick */
-        sum_duration += xtimer_usec_from_ticks(diff);
-    }
-    while ((n > 0) && (sum_duration < (*duration))) {
-        tacho_interval_t *ival = &dev->bufs[idx];
-        sum_count += ival->count;
-        sum_duration += xtimer_usec_from_ticks(xtimer_diff(ival->time_end, ival->time_start));
-        --n;
-        idx = (dev->num_bufs + idx - 1) % dev->num_bufs;
-    }
+    do {
+        unsigned idx = dev->idx;
+        xtimer_ticks32_t now = xtimer_now();
+        xtimer_ticks32_t diff = xtimer_diff(now, dev->bufs[idx].time_end);
+
+        if ((*duration) < xtimer_usec_from_ticks(diff)) {
+            /* no pulses detected within the duration */
+            break;
+        }
+        unsigned n = dev->num_bufs;
+        if (xtimer_less(dev->min_duration, diff)) {
+            /* A long time since the last tick */
+            sum_duration += xtimer_usec_from_ticks(diff);
+        }
+        while ((n > 0) && (sum_duration < (*duration))) {
+            tacho_interval_t *ival = &dev->bufs[idx];
+            sum_count += ival->count;
+            sum_duration += xtimer_usec_from_ticks(xtimer_diff(ival->time_end, ival->time_start));
+            --n;
+            idx = (dev->num_bufs + idx - 1) % dev->num_bufs;
+        }
+    } while(0);
     *count = sum_count;
     *duration = sum_duration;
 }
