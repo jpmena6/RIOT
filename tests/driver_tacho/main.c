@@ -61,7 +61,7 @@ int main(void)
         if (duration > 0) {
             rpm = ((uint64_t)count * 60000000ul) / duration;
         }
-        printf("%8lu BPM\n", rpm);
+        printf("%8lu BPM (%8u [count] / %8" PRIu32 " [us])\n", rpm, count, duration);
 
         xtimer_usleep(SLEEP);
     }
