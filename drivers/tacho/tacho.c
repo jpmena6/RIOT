@@ -41,8 +41,16 @@ static void tacho_trigger(void *arg)
 {
     tacho_t *dev = (tacho_t *)arg;
     tacho_interval_t *ival = &dev->bufs[dev->idx];
+    xtimer_ticks32_t now = xtimer_now();
+    if (xtimer_less(dev->min_duration, xtimer_diff(now, ival->time_end))) {
+        /* The last pulse came a long time ago, place an empty buffer between */
+        /* This will make a pulse buffer of length (now - time_end) with a
+         * single pulse */
+        tacho_rotate_buffers(dev);
+        ival = &dev->bufs[dev->idx];
+    }
     ++ival->count;
-    ival->time_end = xtimer_now();
+    ival->time_end = now;
     if (xtimer_less(dev->min_duration, xtimer_diff(ival->time_end, ival->time_start))) {
         /* Rotate buffers when enough time has passed */
         tacho_rotate_buffers(dev);
@@ -67,7 +75,8 @@ void tacho_read(const tacho_t *dev, unsigned *count, uint32_t *duration)
 {
     unsigned idx = dev->idx;
     xtimer_ticks32_t now = xtimer_now();
-    if ((*duration) < xtimer_usec_from_ticks(xtimer_diff(now, dev->bufs[idx].time_end))) {
+    xtimer_ticks32_t diff = xtimer_diff(now, dev->bufs[idx].time_end);
+    if ((*duration) < xtimer_usec_from_ticks(diff)) {
         /* no pulses detected within the duration */
         *duration = 0;
         *count = 0;
@@ -76,6 +85,10 @@ void tacho_read(const tacho_t *dev, unsigned *count, uint32_t *duration)
     unsigned n = dev->num_bufs;
     unsigned sum_count = 0;
     uint32_t sum_duration = 0;
+    if (xtimer_less(dev->min_duration, diff)) {
+        /* A long time since the last tick */
+        sum_duration += xtimer_usec_from_ticks(diff);
+    }
     while ((n > 0) && (sum_duration < (*duration))) {
         tacho_interval_t *ival = &dev->bufs[idx];
         sum_count += ival->count;
