@@ -59,12 +59,19 @@
 #define LIBDIVIDE_FUNCTION __func__
 #endif
 
+#ifndef RIOT_VERSION
 #define LIBDIVIDE_ERROR(msg) \
     do { \
         fprintf(stderr, "libdivide.h:%d: %s(): Error: %s\n", \
             __LINE__, LIBDIVIDE_FUNCTION, msg); \
         exit(-1); \
     } while (0)
+#else
+#define LIBDIVIDE_ERROR(msg) do { \
+        printf("libdivide error: %s\n", msg); \
+        abort(); \
+    } while (1)
+#endif
 
 #if defined(LIBDIVIDE_ASSERTIONS_ON)
 #define LIBDIVIDE_ASSERT(x) \
@@ -582,7 +589,7 @@ static uint64_t libdivide_128_div_64_to_64(uint64_t u1, uint64_t u0, uint64_t v,
     if (s > 0) {
         // Normalize divisor
         v = v << s;
-        un64 = (u1 << s) | ((u0 >> (64 - s)) & (-s >> 31));
+        un64 = (u1 << s) | ((u0 >> (64 - s)) & (-((int32_t)s) >> 31));
         un10 = u0 << s; // Shift dividend left
     } else {
         // Avoid undefined behavior
