@@ -95,6 +95,18 @@ uint32_t bench_divide(uint64_t *buf, size_t nelem, uint32_t num, uint32_t den)
     return (time_end - time_start);
 }
 
+/* Floating point multiplication on all elements of buf */
+uint32_t bench_double(uint64_t *buf, size_t nelem, uint32_t num, uint32_t den)
+{
+    double scale = ((double)num) / ((double)den);
+    unsigned time_start = timer_read(TIM_REF_DEV);
+    for (unsigned k = 0; k < nelem; ++k) {
+        buf[k] = buf[k] * scale;
+    }
+    unsigned time_end = timer_read(TIM_REF_DEV);
+    return (time_end - time_start);
+}
+
 void timer_cb(void *arg, int chan)
 {
     (void) arg;
@@ -132,7 +144,9 @@ int main(void)
         uint32_t time_frac = bench_frac(buf, ARRAY_LEN(buf), 512, 15625);
         fill_buf(buf, ARRAY_LEN(buf), seed);
         uint32_t time_divide = bench_divide(buf, ARRAY_LEN(buf), 512, 15625);
-        printf("const (  512 /   15625) /,%%: %8" PRIu32 " frac: %8" PRIu32 " div: %8" PRIu32 "\n", time_divide, time_frac, time_div);
+        fill_buf(buf, ARRAY_LEN(buf), seed);
+        uint32_t time_double = bench_double(buf, ARRAY_LEN(buf), 512, 15625);
+        printf("const (  512 /   15625) /,%%: %8" PRIu32 " frac: %8" PRIu32 " div: %8" PRIu32 " double: %8" PRIu32 "\n", time_divide, time_frac, time_div, time_double);
         uint32_t var = variation % 10000ul + 995000ul;
         fill_buf(buf, ARRAY_LEN(buf), seed);
         time_div = bench_div_u64_by_1000000(buf, ARRAY_LEN(buf), var);
@@ -140,12 +154,14 @@ int main(void)
         time_frac = bench_frac(buf, ARRAY_LEN(buf), var, 1000000ul);
         fill_buf(buf, ARRAY_LEN(buf), seed);
         time_divide = bench_divide(buf, ARRAY_LEN(buf), var, 1000000ul);
-        printf("var (%7" PRIu32 " / 1000000) /,%%: %8" PRIu32 " frac: %8" PRIu32 " div: %8" PRIu32 "\n", var, time_divide, time_frac, time_div);
+        fill_buf(buf, ARRAY_LEN(buf), seed);
+        time_divide = bench_double(buf, ARRAY_LEN(buf), var, 1000000ul);
+        printf("var (%7" PRIu32 " / 1000000) /,%%: %8" PRIu32 " frac: %8" PRIu32 " div: %8" PRIu32 " double: %8" PRIu32 "\n", var, time_divide, time_frac, time_div, time_double);
         fill_buf(buf, ARRAY_LEN(buf), seed);
         time_frac = bench_frac(buf, ARRAY_LEN(buf), 1000000ul, var);
         fill_buf(buf, ARRAY_LEN(buf), seed);
         time_divide = bench_divide(buf, ARRAY_LEN(buf), 1000000ul, var);
-        printf("var (1000000 / %7" PRIu32 ") /,%%: %8" PRIu32 " frac: %8" PRIu32 " div: [no implementation]\n", var, time_divide, time_frac);
+        printf("var (1000000 / %7" PRIu32 ") /,%%: %8" PRIu32 " frac: %8" PRIu32 " div:   N/A    double: %8" PRIu32 "\n", var, time_divide, time_frac, time_double);
         ++variation;
     }
     return 0;
