@@ -25,6 +25,9 @@
 #include "net/gnrc.h"
 
 #include "kw41zrf.h"
+#ifdef MODULE_CONTIKIMAC
+#include "net/contikimac.h"
+#endif /* MODULE_CONTIKIMAC */
 
 /**
  * @name    Stack parameters for the MAC layer thread
@@ -44,15 +47,25 @@
 
 static kw41zrf_t kw41zrf_devs[KW41ZRF_NUMOF];
 static char _kw41zrf_stacks[KW41ZRF_NUMOF][KW41ZRF_NETIF_STACKSIZE];
+#ifdef MODULE_CONTIKIMAC
+static contikimac_t contikimac_devs[KW41ZRF_NUMOF];
+#endif /* MODULE_CONTIKIMAC */
 
 void auto_init_kw41zrf(void)
 {
     for (unsigned i = 0; i < KW41ZRF_NUMOF; i++) {
         LOG_DEBUG("[auto_init_netif] initializing kw41zrf #%u\n", i);
         kw41zrf_setup(&kw41zrf_devs[i]);
+#if defined(MODULE_CONTIKIMAC)
+        contikimac_setup(&contikimac_devs[i], &kw41zrf_devs[i].netdev.netdev);
+        gnrc_netif_ieee802154_create(_kw41zrf_stacks[i], KW41ZRF_NETIF_STACKSIZE,
+                                     KW41ZRF_NETIF_PRIO, "kw41zrf-contikimac",
+                                     (netdev_t *)&contikimac_devs[i]);
+#else
         gnrc_netif_ieee802154_create(_kw41zrf_stacks[i], KW41ZRF_NETIF_STACKSIZE,
                                      KW41ZRF_NETIF_PRIO, "kw41zrf",
                                      (netdev_t *)&kw41zrf_devs[i]);
+#endif
     }
 }
 #else
