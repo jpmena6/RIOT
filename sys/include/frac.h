@@ -41,7 +41,6 @@
 #ifndef FRAC_H
 #define FRAC_H
 
-#include <assert.h>
 #include <stdint.h>
 
 #ifdef __cplusplus

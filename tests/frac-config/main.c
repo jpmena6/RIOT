@@ -48,11 +48,7 @@ int main(void)
         printf("Static initialization of frac_t for (%" PRIu32 " / %" PRIu32 "):\n",
             num, den);
         puts("(Copy and paste into your code)\n");
-        printf("{\n"
-            "    .num = %" PRIu32 ",\n"
-            "    .den = %" PRIu32 ",\n"
-            "    .div = { .magic = 0x%" PRIx64 "ull, .more = 0x%02x },\n"
-            "}\n\n", frac.num, frac.den, frac.div.magic, (unsigned)frac.div.more );
+        printf("{ .frac = 0x%" PRIx32 ", .shift = %u }\n\n", frac.frac, (unsigned)frac.shift);
     }
     return 0;
 }
