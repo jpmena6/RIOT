@@ -20,6 +20,16 @@
  * Precomputing the frac_t values can be done via the application found in
  * `tests/frac-config` in the RIOT tree.
  *
+ * ### Numeric precision
+ *
+ * The algorithm will under certain circumstances give an incorrectly rounded
+ * result, more precisely, the result may sometimes be rounded up instead of
+ * rounded down when the product in the numerator, @$p = x \cdot num@$, would
+ * result in @$p >= 2^{31}@$. Fortunately, the relative error of this rounding
+ * mistake is small.
+ *
+ * This tradeoff is a design choice to make the algorithm faster.
+ *
  * @see       Libdivide homepage: http://libdivide.com/
  *
  * @file
@@ -33,7 +43,6 @@
 
 #include <assert.h>
 #include <stdint.h>
-#include "libdivide.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,8 +52,6 @@ extern "C" {
  * @brief   frac descriptor for fraction consisting of two 32 bit integers
  */
 typedef struct {
-    uint32_t num; /**< numerator */
-    uint32_t den; /**< denominator, needed for modulo operation */
     uint32_t frac; /**< fraction */
     uint8_t shift; /**< exponent */
 } frac_t;
@@ -55,7 +62,7 @@ typedef struct {
  * This function computes the mathematical parameters used by the frac algorithm.
  *
  * @note Be extra careful if @p num > @p den, the result from @ref frac_scale
- * may not fit in a 64 bit integer if @c x is very big.
+ * may not fit in a 32 bit integer if @c x is big.
  *
  * @pre @p den must not be 0
  *
@@ -66,17 +73,21 @@ typedef struct {
 void frac_init(frac_t *frac, uint32_t num, uint32_t den);
 
 /**
- * @brief Scale a 64 bit integer by a 32/32 integer fraction
+ * @brief   Scale a 32 bit integer by a 32/32 rational number
  *
- * @pre x * frac < 2**64, i.e. the result fits in a 64 bit integer
+ * @pre x * frac < 2**32, i.e. the result fits in a 32 bit integer
  *
  * @param[in]   frac  scaling fraction
  * @param[in]   x     unscaled integer
  *
  * @return      x * frac, avoiding truncation
- * @return      a wrong result if x * frac > 2**64
+ * @return      a wrong result if x * frac > 2**32
  */
-uint32_t frac_scale(const frac_t *frac, uint32_t x);
+static inline uint32_t frac_scale(const frac_t *frac, uint32_t x)
+{
+    uint32_t scaled = ((uint64_t)frac->frac * x) >> frac->shift;
+    return scaled;
+}
 
 #ifdef __cplusplus
 }

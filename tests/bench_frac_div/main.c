@@ -43,12 +43,12 @@ static uint64_t buf[TEST_NUMOF];
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-/* Apply div_u64_by_15625div512 on all elements of buf */
-uint32_t bench_div_u64_by_15625div512(uint64_t *buf, size_t nelem)
+/* Apply div_u32_by_15625div512 on all elements of buf */
+uint32_t bench_div_u32_by_15625div512(uint64_t *buf, size_t nelem)
 {
     unsigned time_start = timer_read(TIM_REF_DEV);
     for (unsigned k = 0; k < nelem; ++k) {
-        buf[k] = div_u64_by_15625div512(buf[k]);
+        buf[k] = div_u32_by_15625div512(buf[k]);
     }
     unsigned time_end = timer_read(TIM_REF_DEV);
     return (time_end - time_start);
@@ -136,38 +136,12 @@ int main(void)
         puts("Error initializing timer!");
         while(1) {}
     }
-    for (unsigned k = 0; k <= 12; ++k) {
-        for (unsigned j = 0; j <= 12; ++j) {
-            for (unsigned den = 1; den <= 12; ++den) {
-                int prec = 0;
-                uint32_t rem = 0;
-                uint64_t q = frac_long_divide(k * j, den, &rem, &prec);
-                uint64_t i = 0;
-                uint64_t d = 0;
-                if (prec > 0) {
-                    i = (q >> (64 - prec));
-                    d = (q << prec);
-                }
-                else if (prec == 0) {
-                    d = q;
-                }
-                else {
-                    d = (q >> -prec);
-                }
-                unsigned shift = 32 - prec;
-                uint32_t s = (q >> 32);
-                uint32_t r = ((uint64_t)den * s) >> shift;
-                printf("(%2u x %2u) / %2u = %3" PRIu64 ".%016" PRIx64 " (0x%016" PRIx64 ", %d, %" PRIx32 "), %2" PRIu32 "\n", k, j, den, i, d, q, prec, rem, r);
-            }
-        }
-    }
-    //~ while(1) {}
     uint64_t seed = 12345;
     uint32_t variation = 4321;
     while (1) {
         ++seed;
         fill_buf(buf, ARRAY_LEN(buf), seed);
-        uint32_t time_div = bench_div_u64_by_15625div512(buf, ARRAY_LEN(buf));
+        uint32_t time_div = bench_div_u32_by_15625div512(buf, ARRAY_LEN(buf));
         fill_buf(buf, ARRAY_LEN(buf), seed);
         uint32_t time_frac = bench_frac(buf, ARRAY_LEN(buf), 512, 15625);
         fill_buf(buf, ARRAY_LEN(buf), seed);
