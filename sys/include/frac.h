@@ -45,7 +45,8 @@ extern "C" {
 typedef struct {
     uint32_t num; /**< numerator */
     uint32_t den; /**< denominator, needed for modulo operation */
-    struct libdivide_u64_t div; /**< libdivide descriptor for denominator */
+    uint32_t frac; /**< fraction */
+    uint8_t shift; /**< exponent */
 } frac_t;
 
 /**
@@ -75,7 +76,7 @@ void frac_init(frac_t *frac, uint32_t num, uint32_t den);
  * @return      x * frac, avoiding truncation
  * @return      a wrong result if x * frac > 2**64
  */
-uint64_t frac_scale(const frac_t *frac, uint64_t x);
+uint32_t frac_scale(const frac_t *frac, uint32_t x);
 
 #ifdef __cplusplus
 }

@@ -27,7 +27,7 @@
 #include "periph/timer.h"
 
 #ifndef TEST_NUMOF
-#define TEST_NUMOF       4096
+#define TEST_NUMOF       2048
 #endif
 
 #ifndef TIM_REF_DEV
@@ -122,6 +122,8 @@ void fill_buf(uint64_t *buf, size_t nelem, uint64_t seed)
     }
 }
 
+uint64_t frac_long_divide(uint32_t num, uint32_t den, uint32_t *rem, int *prec);
+
 int main(void)
 {
     puts("Division benchmark");
@@ -134,6 +136,32 @@ int main(void)
         puts("Error initializing timer!");
         while(1) {}
     }
+    for (unsigned k = 0; k <= 12; ++k) {
+        for (unsigned j = 0; j <= 12; ++j) {
+            for (unsigned den = 1; den <= 12; ++den) {
+                int prec = 0;
+                uint32_t rem = 0;
+                uint64_t q = frac_long_divide(k * j, den, &rem, &prec);
+                uint64_t i = 0;
+                uint64_t d = 0;
+                if (prec > 0) {
+                    i = (q >> (64 - prec));
+                    d = (q << prec);
+                }
+                else if (prec == 0) {
+                    d = q;
+                }
+                else {
+                    d = (q >> -prec);
+                }
+                unsigned shift = 32 - prec;
+                uint32_t s = (q >> 32);
+                uint32_t r = ((uint64_t)den * s) >> shift;
+                printf("(%2u x %2u) / %2u = %3" PRIu64 ".%016" PRIx64 " (0x%016" PRIx64 ", %d, %" PRIx32 "), %2" PRIu32 "\n", k, j, den, i, d, q, prec, rem, r);
+            }
+        }
+    }
+    //~ while(1) {}
     uint64_t seed = 12345;
     uint32_t variation = 4321;
     while (1) {

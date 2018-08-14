@@ -21,7 +21,7 @@
 #include "frac.h"
 #include "libdivide.h"
 
-#define ENABLE_DEBUG (0)
+#define ENABLE_DEBUG (1)
 #include "debug.h"
 
 /**
@@ -45,7 +45,7 @@ static uint32_t gcd32(uint32_t u, uint32_t v)
         return u;
     }
 
-    /* Let shift := lg K, where K is the greatest power of 2
+    /* Let shift := log2 K, where K is the greatest power of 2
      * dividing both u and v. */
     for (shift = 0; ((u | v) & 1) == 0; ++shift) {
         u >>= 1;
@@ -81,6 +81,64 @@ static uint32_t gcd32(uint32_t u, uint32_t v)
     return u << shift;
 }
 
+uint32_t frac_long_divide(uint32_t num, uint32_t den, int *prec, uint32_t *rem)
+{
+    /* Binary long division with adaptive number of fractional bits */
+    /* The result will be a Qx.y number where x is the number of bits in the
+     * integer part and y = 64 - x. Similar to floating point, except the result
+     * is unsigned, and we can only represent numbers in the range 2**-64..(2**64 - 1) */
+    assert(den); /* divide by zero */
+
+    uint32_t q = 0; /* Quotient */
+    uint32_t r = 0;  /* Remainder */
+    if (prec) {
+        *prec = 0;
+    }
+    if (num == 0) {
+        if (rem) {
+            *rem = 0;
+        }
+        return 0;
+    }
+    unsigned p = bitarithm_msb(num);
+    int i_bits = p + 1; /* Number of integer bits in the result */
+    uint32_t num_mask = (1ul << p);
+    for (unsigned k = 0; k < (64u + p); ++k) {
+        r <<= 1;
+        q <<= 1;
+        if (num & num_mask) {
+            r |= 1;
+        }
+        num_mask >>= 1;
+        if (r >= den) {
+            r -= den;
+            q |= 1;
+        }
+        if (q == 0) {
+            --i_bits;
+        }
+        if (q & (1ul << 31u)) {
+            /* result register is full */
+            break;
+        }
+        if ((r == 0) && (num == 0)) {
+            /* divides evenly */
+            break;
+        }
+    }
+    if (r > (den / 2)) {
+        ++q;
+    }
+    if (prec) {
+        *prec = i_bits;
+    }
+    if (rem) {
+        *rem = r;
+    }
+
+    return q;
+}
+
 void frac_init(frac_t *frac, uint32_t num, uint32_t den)
 {
     DEBUG("frac_init32(%p, %" PRIu32 ", %" PRIu32 ")\n", (const void *)frac, num, den);
@@ -88,33 +146,34 @@ void frac_init(frac_t *frac, uint32_t num, uint32_t den)
     /* Reduce the fraction to shortest possible form by dividing by the greatest
      * common divisor */
     uint32_t gcd = gcd32(num, den);
-    DEBUG("frac_init32: gcd = %" PRIu32 "\n", gcd);
-    /* Use libdivide even though we only use this divisor twice, to avoid
-     * unnecessarily pulling in libgcc division helpers if hardware is missing
-     * division instructions */
-    struct libdivide_u64_t div = libdivide_u64_gen(gcd);
-    /* equivalent to: den /= gcd; */
-    den = libdivide_u64_do(den, &div);
-    num = libdivide_u64_do(num, &div);
-    DEBUG("frac_init32: gcd = %" PRIu32 " num = %" PRIu32 " den = %" PRIu32 "\n",
-          gcd, num, den);
-    frac->div = libdivide_u64_gen(den);
+    /* Divide den and num by their greatest common divisor */
+    den /= gcd;
+    num /= gcd;
+    int prec = 0;
+    uint32_t rem = 0;
+    frac->frac = frac_long_divide(num, den, &prec, &rem);
+    frac->shift = 32 - prec;
+    DEBUG("frac_init32: gcd = %" PRIu32 " num = %" PRIu32 " den = %" PRIu32 " frac = 0x%08" PRIx32 " shift = %02d, rem = 0x%08" PRIx32 "\n",
+          gcd, num, den, frac->frac, frac->shift, rem);
     frac->den = den;
     frac->num = num;
 }
 
-uint64_t frac_scale(const frac_t *frac, uint64_t x)
+uint32_t frac_scale(const frac_t *frac, uint32_t x)
 {
     assert(frac);
-    /* integer quotient */
-    uint64_t quot = libdivide_u64_do(x, &frac->div);
-    /* remainder */
-    uint64_t rem = x - (quot * frac->den);
-    /* quot * frac->num may wrap around when num > den and x is "big" */
-    /* rem * frac->num will never wrap around as long as both num and den are at
-     * most 32 bits wide, u32 x u32 -> u64 */
-    uint64_t scaled = quot * frac->num + libdivide_u64_do(rem * frac->num, &frac->div);
-    DEBUG("frac_scale32: x = %" PRIu64 " quot = %" PRIu64 " rem = %" PRIu64
-          " scaled = %" PRIu64 "\n", x, quot, rem, scaled);
+    uint64_t scaled = ((uint64_t)frac->frac * x) >> frac->shift;
+    DEBUG("frac_scale32: x = %" PRIu32 " * %" PRIu32 " / %" PRIu32 " = %" PRIu64 "\n",
+        x, frac->num, frac->den, scaled);
+    //~ /* integer quotient */
+    //~ uint64_t quot = libdivide_u64_do(x, &frac->div);
+    //~ /* remainder */
+    //~ uint64_t rem = x - (quot * frac->den);
+    //~ /* quot * frac->num may wrap around when num > den and x is "big" */
+    //~ /* rem * frac->num will never wrap around as long as both num and den are at
+     //~ * most 32 bits wide, u32 x u32 -> u64 */
+    //~ uint64_t scaled = quot * frac->num + libdivide_u64_do(rem * frac->num, &frac->div);
+    //~ DEBUG("frac_scale32: x = %" PRIu64 " quot = %" PRIu64 " rem = %" PRIu64
+          //~ " scaled = %" PRIu64 "\n", x, quot, rem, scaled);
     return scaled;
 }

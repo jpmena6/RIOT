@@ -17,6 +17,7 @@
 #include "debug.h"
 
 static const uint32_t u32_fraction_operands[] = {
+    1000000l,
     1l,
     2l,
     5l,
@@ -73,6 +74,7 @@ static const uint64_t u64_test_values[] = {
     100000000ul,
     2100012683ul,            /* <- prime */
     0x7ffffffful,
+#if 0
     11111111111ull,
     0x100000000ull,
     16383999997ull,
@@ -95,6 +97,7 @@ static const uint64_t u64_test_values[] = {
     0x1111111111111111ull,
     0x7fffffffffffffffull,
     0x8000000000000000ull,
+#endif
 };
 
 #define N_U32_OPERANDS (sizeof(u32_fraction_operands) / sizeof(u32_fraction_operands[0]))
@@ -129,16 +132,19 @@ static void test_frac_scale32(void)
                 uint64_t rem = 0;
                 /* compute 128/64 -> 64 division */
                 uint64_t expected = libdivide_128_div_64_to_64(hi, lo, den, &rem);
+                if (expected > 0xfffffffful) {
+                    continue;
+                }
                 if (rem == (uint64_t) -1) {
                     /* Expected value does not fit in a 64 bit unsigned integer */
                     DEBUG("overflow, skipping\n");
                     continue;
                 }
                 uint64_t actual = frac_scale(&frac, u64_test_values[i]);
-                DEBUG("expect %" PRIu64 ", actual %" PRIu64 "\n",  expected, actual);
-                TEST_ASSERT_EQUAL_INT(
-                    expected,
-                    actual);
+                if ((uint32_t)expected != actual) {
+                    printf("expect %" PRIu64 ", actual %" PRIu64 "\n",  expected, actual);
+                }
+                TEST_ASSERT_EQUAL_INT((uint32_t)expected, (uint32_t)actual);
             }
         }
     }
