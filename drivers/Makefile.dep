@@ -221,7 +221,6 @@ endif
 
 ifneq (,$(filter lis2dh12%,$(USEMODULE)))
   ifneq (,$(filter lis2dh12_spi,$(USEMODULE)))
-    FEATURES_REQUIRED += periph_gpio
     FEATURES_REQUIRED += periph_spi
   else
     FEATURES_REQUIRED += periph_i2c
@@ -230,8 +229,12 @@ ifneq (,$(filter lis2dh12%,$(USEMODULE)))
 endif
 
 ifneq (,$(filter lis3dh,$(USEMODULE)))
-  FEATURES_REQUIRED += periph_gpio
   FEATURES_REQUIRED += periph_spi
+endif
+
+ifneq (,$(filter lis3mdl,$(USEMODULE)))
+  FEATURES_REQUIRED += periph_i2c
+  USEMODULE += xtimer
 endif
 
 ifneq (,$(filter lpd8808,$(USEMODULE)))
@@ -424,7 +427,17 @@ ifneq (,$(filter tcs37727,$(USEMODULE)))
   FEATURES_REQUIRED += periph_i2c
 endif
 
+ifneq (,$(filter tja1042,$(USEMODULE)))
+  USEMODULE += can_trx
+  FEATURES_REQUIRED += periph_gpio
+endif
+
 ifneq (,$(filter tmp006,$(USEMODULE)))
+  FEATURES_REQUIRED += periph_i2c
+  USEMODULE += xtimer
+endif
+
+ifneq (,$(filter tsl2561,$(USEMODULE)))
   FEATURES_REQUIRED += periph_i2c
   USEMODULE += xtimer
 endif
@@ -452,19 +465,4 @@ ifneq (,$(filter xbee,$(USEMODULE)))
   USEMODULE += ieee802154
   USEMODULE += xtimer
   USEMODULE += netif
-endif
-
-ifneq (,$(filter lis3mdl,$(USEMODULE)))
-  FEATURES_REQUIRED += periph_i2c
-  USEMODULE += xtimer
-endif
-
-ifneq (,$(filter tja1042,$(USEMODULE)))
-  USEMODULE += can_trx
-  FEATURES_REQUIRED += periph_gpio
-endif
-
-ifneq (,$(filter tsl2561,$(USEMODULE)))
-  FEATURES_REQUIRED += periph_i2c
-  USEMODULE += xtimer
 endif
