@@ -466,3 +466,10 @@ ifneq (,$(filter xbee,$(USEMODULE)))
   USEMODULE += xtimer
   USEMODULE += netif
 endif
+
+ifneq (,$(filter periph_common,$(USEMODULE)))
+  ifneq (,$(filter periph_spi,$(USEMODULE)))
+    # periph_common uses periph_gpio for SPI CS handling
+    FEATURES_REQUIRED += periph_gpio
+  endif
+endif
