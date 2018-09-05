@@ -157,12 +157,14 @@ int main(void)
         fill_buf(buf, ARRAY_LEN(buf), seed);
         time_divide = bench_divide(buf, ARRAY_LEN(buf), var, 1000000ul);
         fill_buf(buf, ARRAY_LEN(buf), seed);
-        time_divide = bench_double(buf, ARRAY_LEN(buf), var, 1000000ul);
+        time_double = bench_double(buf, ARRAY_LEN(buf), var, 1000000ul);
         printf("var (%7" PRIu32 " / 1000000) /,%%: %8" PRIu32 " frac: %8" PRIu32 " div: %8" PRIu32 " double: %8" PRIu32 "\n", var, time_divide, time_frac, time_div, time_double);
         fill_buf(buf, ARRAY_LEN(buf), seed);
         time_frac = bench_frac(buf, ARRAY_LEN(buf), 1000000ul, var);
         fill_buf(buf, ARRAY_LEN(buf), seed);
         time_divide = bench_divide(buf, ARRAY_LEN(buf), 1000000ul, var);
+        fill_buf(buf, ARRAY_LEN(buf), seed);
+        time_double = bench_double(buf, ARRAY_LEN(buf), 1000000ul, var);
         printf("var (1000000 / %7" PRIu32 ") /,%%: %8" PRIu32 " frac: %8" PRIu32 " div:   N/A    double: %8" PRIu32 "\n", var, time_divide, time_frac, time_double);
         ++variation;
     }
