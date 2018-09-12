@@ -155,7 +155,7 @@ void bench_timers_cb(void *arg)
      * X * time_per_tick.
      * In order to ensure that dT <= X * time_per_tick, the timer read value
      * will actually have incremented (X + 1) times during that period,
-     * because the set can occur asynchrously anywhere between timer
+     * because the set can occur asynchronously anywhere between timer
      * increments. Therefore, in this test, we consider (X + 1) to be the
      * expected timer_read value at the point the callback is called.
      */

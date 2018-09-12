@@ -30,6 +30,9 @@
 #if TEST_XTIMER
 #include "xtimer.h"
 #endif
+#if TEST_ZTIMER
+#include "ztimer.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +53,10 @@ extern "C" {
 #endif
 #ifndef TIM_TEST_CHAN
 #define TIM_TEST_CHAN 0
+#endif
+/* ztimer clock to use */
+#ifndef TEST_ZTIMER_DEV
+#define TEST_ZTIMER_DEV ZTIMER_USEC
 #endif
 
 /* Use separate reference timer to compare against */
@@ -254,7 +261,9 @@ extern "C" {
 #define TUT_READ() _xtimer_now()
 #elif TEST_ZTIMER
 #define TEST_VARIANT_NUMOF 2
-#define TUT_READ() ztimer_now(TIM_TEST_DEV)
+#define TUT_RUN test_ztimer_run
+#define TUT_PRESENTATION test_ztimer_presentation
+#define TUT_READ() ztimer_now(TEST_ZTIMER_DEV)
 #else
 #define TEST_VARIANT_NUMOF 6
 #define TUT_RUN test_periph_timer_run
