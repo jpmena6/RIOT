@@ -239,4 +239,9 @@ extern ztimer_dev_t *const ZTIMER_USEC;
  */
 extern ztimer_dev_t *const ZTIMER_MSEC;
 
+/**
+ * @brief   Default ztimer low power 32.768 kHz clock
+ */
+extern ztimer_dev_t *const ZTIMER_LP32K;
+
 #endif /* ZTIMER_H */
