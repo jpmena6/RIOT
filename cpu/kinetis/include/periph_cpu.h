@@ -318,7 +318,7 @@ typedef struct {
     /** Input clock frequency */
     uint32_t base_freq;
     /** LLWU wakeup module number for this timer */
-    llwu_wakeup_module_t llwu; 
+    llwu_wakeup_module_t llwu;
     /** Clock source setting */
     uint8_t src;
     /** IRQn interrupt number */
