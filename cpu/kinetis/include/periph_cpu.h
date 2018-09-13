@@ -110,17 +110,18 @@ typedef uint16_t gpio_t;
 #define PERIPH_TIMER_PROVIDES_SET
 
 /**
- * @brief   number of usable power modes
+ * @name    Kinetis power mode configuration
+ * @{
  */
 #define PM_NUM_MODES    (4U)
-#define PM_BLOCKER_INITIAL  { .val_u32 = 0 }
-
 enum {
     KINETIS_PM_LLS  = 0,
     KINETIS_PM_VLPS = 1,
     KINETIS_PM_STOP = 2,
     KINETIS_PM_WAIT = 3,
 };
+#define PM_BLOCKER_INITIAL  { .val_u32 = 0 }
+/** @} */
 
 #ifdef RTC
 /* All Kinetis CPUs have exactly one RTC hardware module, except for the KL02
@@ -438,7 +439,10 @@ typedef struct {
      */
     llwu_wakeup_pin_t llwu_rx;
 } uart_conf_t;
-/* We use a custom uart_isr_ctx_t in uart.c */
+
+/**
+ * @brief  Override the default uart_isr_ctx_t in uart.c
+ */
 #define HAVE_UART_ISR_CTX_T
 
 #if !defined(KINETIS_HAVE_PLL)
