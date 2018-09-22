@@ -115,19 +115,26 @@ static void ztimer_extend_update(ztimer_extend_t *self)
     uint32_t lower_now = ztimer_now(self->lower);
     uint32_t now32 = ztimer_extend_now32(self, lower_now, self->origin);
     uint32_t target = self->super.list.offset + self->super.list.next->offset;
+    if (target <= now32) {
+        DEBUG("zx: miss %p, now32=%" PRIu32 " target=%" PRIu32 "\n",
+            (void *)&self->lower_alarm_entry, now32, target & self->lower_max);
+        ztimer_set(self->lower, &self->lower_alarm_entry, 0);
+        return;
+    }
     target -= now32;
     if ((lower_now + target) > self->lower_max) {
         /* Await counter rollover first */
         return;
     }
-    DEBUG("zx: set lower_alarm %p, target=%" PRIu32 "\n",
-        (void *)&self->lower_alarm_entry, target);
+    DEBUG("zx: set lower_alarm %p, now32=%" PRIu32 " target=%" PRIu32 "\n",
+        (void *)&self->lower_alarm_entry, now32, target & self->lower_max);
     ztimer_set(self->lower, &self->lower_alarm_entry, target);
 }
 
 static void ztimer_extend_op_set(ztimer_dev_t *z, uint32_t val)
 {
     (void)val;
+    DEBUG("zx: set %" PRIu32 "\n", val);
     ztimer_extend_t *self = (ztimer_extend_t *)z;
 
     ztimer_extend_update(self);
