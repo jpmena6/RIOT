@@ -25,7 +25,7 @@
 
 #include "ztimer/extend.h"
 
-#define ENABLE_DEBUG (0)
+#define ENABLE_DEBUG (1)
 #include "debug.h"
 
 /**
@@ -44,7 +44,7 @@ static void ztimer_extend_alarm_callback(void* arg);
  *
  * @param[in]   arg     pointer to the owner @ref ztimer_extend_t instance
  */
-static void ztimer_extend_overflow_callback(void* arg);
+static void ztimer_extend_partition_callback(void* arg);
 
 /**
  * @brief   Extend a timestamp from the lower counter to the full width virtual clock
@@ -73,18 +73,18 @@ static void ztimer_extend_update(ztimer_extend_t *self);
 static void ztimer_extend_alarm_callback(void* arg)
 {
     ztimer_extend_t *self = (ztimer_extend_t *)arg;
-    DEBUG("ztimer_extend_alarm_callback()\n");
+    DEBUG("zx: alarm\n");
     ztimer_handler(&self->super);
 }
 
-static void ztimer_extend_overflow_callback(void* arg)
+static void ztimer_extend_partition_callback(void* arg)
 {
     ztimer_extend_t *self = (ztimer_extend_t *)arg;
     /* Update origin and update targets */
-    uint32_t lower_now = self->lower->list.offset;
+    uint32_t lower_now = ztimer_now(self->lower);
     uint32_t now32 = ztimer_extend_now32(self, lower_now, self->origin);
     self->origin = now32 & ~(self->partition_mask);
-    DEBUG("zx: partition, origin = 0x%08" PRIx32 "\n", self->origin);
+    DEBUG("zx: partition, now32=0x%" PRIx32 " origin=0x%08" PRIx32 "\n", now32, self->origin);
 
     /* Ensure that there is always at least one alarm target inside
      * each partition, in order to always detect timer rollover */
@@ -93,7 +93,7 @@ static void ztimer_extend_overflow_callback(void* arg)
      * timers if the counter moves backwards (unsigned diff with a negative number)
      * TODO: IMPORTANT Rework this code if the implementation of core.c
      * _update_head_offset is altered */
-    ztimer_set(self->lower, &self->lower_overflow_entry, self->partition_mask + 1);
+    ztimer_set(self->lower, &self->lower_partition_entry, self->partition_mask + 1);
 
     /* Update alarms */
     ztimer_extend_update(self);
@@ -110,14 +110,15 @@ static void ztimer_extend_update(ztimer_extend_t *self)
 {
     if (!self->super.list.next) {
         /* No alarms queued */
+        DEBUG("zx: no alarm\n");
         return;
     }
     uint32_t lower_now = ztimer_now(self->lower);
     uint32_t now32 = ztimer_extend_now32(self, lower_now, self->origin);
     uint32_t target = self->super.list.offset + self->super.list.next->offset;
     if (target <= now32) {
-        DEBUG("zx: miss %p, now32=%" PRIu32 " target=%" PRIu32 "\n",
-            (void *)&self->lower_alarm_entry, now32, target & self->lower_max);
+        DEBUG("zx: miss %p, now32=0x%" PRIx32 " target=0x%" PRIx32 "\n",
+            (void *)&self->lower_alarm_entry, now32, target);
         ztimer_set(self->lower, &self->lower_alarm_entry, 0);
         return;
     }
@@ -126,7 +127,7 @@ static void ztimer_extend_update(ztimer_extend_t *self)
         /* Await counter rollover first */
         return;
     }
-    DEBUG("zx: set lower_alarm %p, now32=%" PRIu32 " target=%" PRIu32 "\n",
+    DEBUG("zx: update %p, now32=0x%" PRIx32 " target=0x%" PRIx32 "\n",
         (void *)&self->lower_alarm_entry, now32, target & self->lower_max);
     ztimer_set(self->lower, &self->lower_alarm_entry, target);
 }
@@ -134,15 +135,15 @@ static void ztimer_extend_update(ztimer_extend_t *self)
 static void ztimer_extend_op_set(ztimer_dev_t *z, uint32_t val)
 {
     (void)val;
-    DEBUG("zx: set %" PRIu32 "\n", val);
     ztimer_extend_t *self = (ztimer_extend_t *)z;
-
+    DEBUG("zx: set %p target=0x%" PRIx32 "\n", (void *)self, val);
     ztimer_extend_update(self);
 }
 
 static void ztimer_extend_op_cancel(ztimer_dev_t *z)
 {
     ztimer_extend_t *self = (ztimer_extend_t *) z;
+    DEBUG("zx: cancel %p\n", (void *)self);
     ztimer_remove(self->lower, &self->lower_alarm_entry);
 }
 
@@ -156,7 +157,7 @@ static uint32_t ztimer_extend_op_now(ztimer_dev_t *z)
         lower_now = ztimer_now(self->lower);
     } while (origin != self->origin);
     uint32_t now32 = ztimer_extend_now32(self, lower_now, origin);
-    DEBUG("zx: now = 0x%08" PRIx32 "\n", now32);
+    //~ DEBUG("zx: now = 0x%08" PRIx32 "\n", now32);
     return now32;
 }
 
@@ -174,7 +175,7 @@ void ztimer_extend_init(ztimer_extend_t *self, ztimer_dev_t *lower, unsigned low
         .super = { .ops = &ztimer_extend_ops, },
         .lower = lower,
         .lower_alarm_entry = { .callback = ztimer_extend_alarm_callback, .arg = self, },
-        .lower_overflow_entry = { .callback = ztimer_extend_overflow_callback, .arg = self, },
+        .lower_partition_entry = { .callback = ztimer_extend_partition_callback, .arg = self, },
         .lower_max = lower_max,
         .partition_mask = (lower_max >> 2),
     };
@@ -184,5 +185,5 @@ void ztimer_extend_init(ztimer_extend_t *self, ztimer_dev_t *lower, unsigned low
 
     /* Ensure that there is always at least one alarm target inside
      * each partition, in order to always detect timer rollover */
-    ztimer_set(lower, &self->lower_overflow_entry, self->partition_mask + 1);
+    ztimer_set(lower, &self->lower_partition_entry, self->partition_mask + 1);
 }

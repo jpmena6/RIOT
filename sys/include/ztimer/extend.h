@@ -77,7 +77,7 @@ typedef struct {
     /**
      * @brief   Partition transition alarm entry for underlying clock
      */
-    ztimer_t lower_overflow_entry;
+    ztimer_t lower_partition_entry;
     /**
      * @brief   Offset from underlying timer to virtual long counter
      */
