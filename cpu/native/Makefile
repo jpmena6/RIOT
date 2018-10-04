@@ -3,9 +3,7 @@ MODULE = cpu
 DIRS += periph
 DIRS += vfs
 
-ifeq ($(shell uname -s),Darwin)
-  CFLAGS += -D_XOPEN_SOURCE=600 -D_DARWIN_C_SOURCE
-endif
+CFLAGS += -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_SVID_SOURCE -D_XOPEN_SOURCE=700 -D_POSIX_C_SOURCE=200809
 
 ifneq (,$(filter netdev_tap,$(USEMODULE)))
   DIRS += netdev_tap
