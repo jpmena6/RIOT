@@ -3,3 +3,6 @@ MODULE=hacl
 include $(RIOTBASE)/Makefile.base
 
 CFLAGS += -DKRML_NOUINT128 -Wno-unused-parameter
+
+# Required for the <endian.h> macros on Linux (glibc)
+CFLAGS += -D_DEFAULT_SOURCE -D_BSD_SOURCE -D_SVID_SOURCE
