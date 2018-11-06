@@ -141,7 +141,7 @@ uint8_t bitarithm_bits_set_u32(uint32_t v);
 static inline unsigned bitarithm_lsb(unsigned v)
 #if defined(BITARITHM_LSB_BUILTIN)
 {
-    return __builtin_ffs(v) - 1;
+    return __builtin_ctz(v);
 }
 #elif defined(BITARITHM_LSB_LOOKUP)
 {
