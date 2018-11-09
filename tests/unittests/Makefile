@@ -81,6 +81,7 @@ BOARD_INSUFFICIENT_MEMORY := airfy-beacon \
                              yunjia-nrf51822 z1
 
 USEMODULE += embunit
+USEMODULE += ps
 
 ifeq (, $(filter tests-%, $(MAKECMDGOALS)))
   # the $(dir) Makefile function leaves a trailing slash after the directory

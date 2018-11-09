@@ -175,7 +175,7 @@ kernel_pid_t thread_create(char *stack, int stacksize, char priority, int flags,
     /* allocate our thread control block at the top of our stackspace */
     thread_t *cb = (thread_t *) (stack + stacksize);
 
-#if defined(DEVELHELP) || defined(SCHED_TEST_STACK)
+#if 1 || defined(DEVELHELP) || defined(SCHED_TEST_STACK)
     if (flags & THREAD_CREATE_STACKTEST) {
         /* assign each int of the stack the value of it's address */
         uintptr_t *stackmax = (uintptr_t *) (stack + stacksize);
@@ -214,7 +214,7 @@ kernel_pid_t thread_create(char *stack, int stacksize, char priority, int flags,
     cb->pid = pid;
     cb->sp = thread_stack_init(function, arg, stack, stacksize);
 
-#if defined(DEVELHELP) || defined(SCHED_TEST_STACK) || defined(MODULE_MPU_STACK_GUARD)
+#if 1 || defined(DEVELHELP) || defined(SCHED_TEST_STACK) || defined(MODULE_MPU_STACK_GUARD)
     cb->stack_start = stack;
 #endif
 

@@ -201,7 +201,7 @@ struct _thread {
     msg_t *msg_array;               /**< memory holding messages sent
                                          to this thread's message queue */
 #endif
-#if defined(DEVELHELP) || defined(SCHED_TEST_STACK) \
+#if 1 || defined(DEVELHELP) || defined(SCHED_TEST_STACK) \
     || defined(MODULE_MPU_STACK_GUARD) || defined(DOXYGEN)
     char *stack_start;              /**< thread's stack start address   */
 #endif

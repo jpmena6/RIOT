@@ -36,5 +36,18 @@ int main(void)
 #endif
     TESTS_END();
 
+    uintptr_t *stackp = (uintptr_t *)sched_active_thread->stack_start;
+    ++stackp;
+
+    /* assume that the comparison fails before or after end of stack */
+    /* assume that the stack grows "downwards" */
+    while (*stackp == (uintptr_t) stackp) {
+        stackp++;
+    }
+
+    uintptr_t space_free = (uintptr_t) stackp - (uintptr_t) sched_active_thread->stack_start;
+
+    printf("Stack: %p free: %u\n", (void *)sched_active_thread->stack_start, (unsigned)space_free);
+
     return 0;
 }
