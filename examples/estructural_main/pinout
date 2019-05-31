@@ -1,0 +1,12 @@
+Pin 1 	Chip Select 			/CS\SCL		PTC2 (I2C1_SCL) J2.10
+Pin 2 	Master Out Slave In 	MOSI\SDA	PTC3 (I2C1_SDA) J2.9
+Pin 3 	Master In Slave Out 	MISO\ASEL	GND	
+Pin 4 	Serial Clock 			SCLK\VSSIO	3V3				J3.4
+Pin 5 	Digital Ground 			DGND
+Pin 6 	Digital Power 			VDD
+Pin 7 	Interrupt 1 			INT1
+Pin 8 	Not Connected 			NC
+Pin 9 	Interrupt 2 			INT2
+Pin 10 	Data Ready 				DRDY
+Pin 11 	Digital Ground 			DGND
+Pin 12 	Digital Power 			VDD 
