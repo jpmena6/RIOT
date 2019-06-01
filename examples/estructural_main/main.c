@@ -41,7 +41,7 @@ void *ping_monitor(void *arg)
 		puts("Sending ping");
 		if (coms_ping_server("fd11::100", &PingReply)){
 			puts("Error sending PING to Server");
-			//com_restart();
+			com_restart();
 			led_red(1);
 		}
 		/* if not received after 3 seconds restart coms */
@@ -162,10 +162,10 @@ int main(void)
 		//coms_send_to("fd11::100", PORT_SERVER, "I am a MCU !");
 		puts("End sending all to server");
 		while(1){
-			xtimer_sleep(1);
+			xtimer_usleep(300000);
 			puts("Sending Data ready !");
 			com_send_data_ready();
-			xtimer_sleep(1);
+			xtimer_usleep(300000);
 			if (RequestedPage >= 0)
 				_coms_send_page(RequestedPage);
 
@@ -197,9 +197,6 @@ int main(void)
 		sample_t sample;
 		sample.ntp_time = xtimer_now_usec() + TheDeltaTime;
 		adxl335_get(&sample.x, &sample.y, &sample.z);
-		
-
-		
 		estructural_save_data(&sample ,(void *)&earthquake_manage_pid);
 		
 

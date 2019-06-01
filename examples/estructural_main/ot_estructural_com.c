@@ -198,7 +198,7 @@ void coms_process_sync(void *aContext, otMessage *aMessage, const otMessageInfo 
 {
 	(void)aContext;
 	//static uint32_t RTT;
-	static uint32_t NTP;
+	static uint32_t ntp;
 
 	otIp6Address peerAddr = aMessageInfo->mPeerAddr;
 	(void) peerAddr;
@@ -211,15 +211,17 @@ void coms_process_sync(void *aContext, otMessage *aMessage, const otMessageInfo 
 
 	//puts("Received UDP to P2P:");
 	//puts(buff);
-
+	//char debug_buff[50];
 	/* Received RTT or NTP */
 	if (buff[0] == 'R'){
 
 	}else if (buff[0] == 'N'){
-		NTP = atol(numbuff);
+		ntp = strtoul(numbuff,0,10);
+		//sprintf(debug_buff,"buff=%s, ntp=%ld", numbuff, ntp);
+		//puts(debug_buff);
 		/* update timer */
 		//estructural_set_counter(NTP + (RTT>>1));/* NTP + RTT/2 */
-		estructural_set_counter(NTP);
+		estructural_set_counter(ntp);
 	}
 
 }

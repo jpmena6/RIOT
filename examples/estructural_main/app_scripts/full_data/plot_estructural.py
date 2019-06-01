@@ -5,7 +5,9 @@ import os
 import struct
 import time 
 node = "e45c"
-num = "0"
+node = "bd07"
+node = ":365"
+num = "1"
 
 def bit20_to_int(num):
 	if (num & 0x80000): # is signed
@@ -17,6 +19,8 @@ def bit20_to_int(num):
 def append_raw(raw_text, list_x, list_y, list_z, list_e):
 	for i in range(0, 260, 13):
 		e = int.from_bytes(raw_text[i+0:i+4],byteorder='big')
+		#e = float(int.from_bytes(raw_text[i+0:i+2],byteorder='big'))
+		#e = e*2**16+float(int.from_bytes(raw_text[i+2:i+4],byteorder='big'))
 		x = int.from_bytes(raw_text[i+4:i+7],byteorder='big')
 		y = int.from_bytes(raw_text[i+7:i+10],byteorder='big')
 		z = int.from_bytes(raw_text[i+10:i+13],byteorder='big')
@@ -50,14 +54,19 @@ with open("{}_{}.txt".format(node, num), "w") as f:
 
 #print(time.localtime(list_e[0]/1000000))
 #print(max(list_e) - min(list_e))
-print(list_e[2]- list_e[1])
-print(list_e[3]- list_e[2])
-print(list_e[4]- list_e[3])
 
-#plt.plot(list_e,list_z)
-#plt.plot(list_e,list_x)
+
+plt.plot(list_e,list_x)
+plt.plot(list_e,list_y)
+plt.plot(list_e,list_z)
+#plt.plot(list_e)
+#plt.plot(list_x)
+#plt.plot(list_y)
+#plt.plot(list_z)
+plt.grid(b=1)
+plt.show()
+
 plt.plot(list_e)
-#plt.plot(list_e,list_y)
 plt.grid(b=1)
 plt.show()
 

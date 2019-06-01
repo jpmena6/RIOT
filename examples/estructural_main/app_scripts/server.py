@@ -1,5 +1,6 @@
 import socket
 from datetime import datetime
+import filecmp
 import os
 IP = "fd11::100"
 PORT = 8888
@@ -42,9 +43,16 @@ class Node:
 			if (page > idealpage):
 				return idealpage
 			elif (page < idealpage): # duplication
-				pass
+				print "duplication on file {}, node {}!".format(page, self.directory)
+				if filecmp.cmp("{}/{}".format(self.directory,namefile), "{}/{}".format(self.directory,lastfilename)):
+					os.remove("{}/{}".format(self.directory,lastfilename))
+				else:
+					print "Have two files for same page but contents differ! manually select.."
+					raise
 			else:
 				idealpage += 1
+
+			lastfilename=namefile
 			
 		# check data and return missing page		
 		return None
@@ -58,7 +66,7 @@ class Node:
 		return True
 
 	def request_page(self, page):
-		print("Requesting page: S{}".format(page))
+		print("Requesting page: S{} to node {}".format(page, self.directory))
 		self.sock.sendto("S{}".format(page), (self.ipv6, self.port))
 		return
 
@@ -68,6 +76,7 @@ class Node:
 		if (m != None):
 			self.request_page(m)
 		else:
+			print "Have all data for node {}, clearing memory and reseting..".format(self.directory)
 			self.move_data()
 			self.clear_memory()
 			self.restart_node()
@@ -76,7 +85,6 @@ class Node:
 		if (data[0] == 'S'):
 			self.save(data)
 		elif(data[0] == 'D'):
-			print "Received Data ready !"
 			self.manage_node()
 
 	def save(self, data):

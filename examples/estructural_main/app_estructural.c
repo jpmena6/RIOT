@@ -62,7 +62,7 @@ static void calibrate_earthquake(void)
 {
 	sample_t sample;
 	
-	const uint8_t average = 10;
+	const float average = 100.0;
 	uint8_t i;
 	EarthquakeThreshold = 0;
 
@@ -72,7 +72,7 @@ static void calibrate_earthquake(void)
 		int32_t y = bit20_to_int32(sample.y);
 		int32_t z = bit20_to_int32(sample.z);
 		EarthquakeThreshold +=  ((float) x*x + y*y + z*z)*EARTHQUAKE_THRESHOLD/average;
-		xtimer_usleep(100000);
+		xtimer_usleep(10000);
 	}
 }
 
@@ -211,11 +211,11 @@ uint8_t save_to_flash(void * msg){
 		space_available = _add_sample_to_write_buff(write_buff, &sample_buffer[current_sample++],&write_buff_pos);
 		//printf("write_buff_pos = %d\r\n",write_buff_pos);
 		if (!space_available){
-			puts("page_write");
+			//puts("page_write");
 			AT45DB041E_page_write(page++, write_buff,write_buff_pos);
 			write_buff_pos = 0;
 		}else if(i == SAMPLES_PER_SECOND*HISTORY_TIME_S - 1){ /* last iteration */
-			puts("page_write");
+			//puts("page_write");
 			AT45DB041E_page_write(page++, write_buff,write_buff_pos);
 			write_buff_pos = 0;
 		}

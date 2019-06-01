@@ -118,7 +118,7 @@ void kw41zrf_set_addr_short(kw41zrf_t *dev, uint16_t addr)
     addr &= 0x7fff;
 #endif
     ZLL->MACSHORTADDRS0 = (ZLL->MACSHORTADDRS0 & ~ZLL_MACSHORTADDRS0_MACSHORTADDRS0_MASK) |
-        ZLL_MACSHORTADDRS0_MACSHORTADDRS0(addr);
+        ZLL_MACSHORTADDRS0_MACSHORTADDRS0( ((addr&0xff)<<8) | (addr>>8) );
 }
 
 void kw41zrf_set_addr_long(kw41zrf_t *dev, uint64_t addr)

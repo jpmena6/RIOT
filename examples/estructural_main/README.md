@@ -33,7 +33,10 @@ Then change:
  ZLL->MACSHORTADDRS0 = (ZLL->MACSHORTADDRS0 & ~ZLL_MACSHORTADDRS0_MACSHORTADDRS0_MASK) |
        ZLL_MACSHORTADDRS0_MACSHORTADDRS0( ((addr&0xff)<<8) | (addr>>8));
 
-in kw41zrf_set_addr_short(...) in drivers/kw41zrf/kw41zrf_getset.c 
+in kw41zrf_set_addr_short(...) in drivers/kw41zrf/kw41zrf_getset.c
+
+or simply clone my taherrera/RIOT
+and checkout estructural_openthread_kw41z 
 
 =========
 
@@ -64,5 +67,20 @@ On server:
 sudo ip -6 addr add fd11::100/64 dev eth0
 sudo ip -6 route add fd11:1212::/64 via fe80::a2f6:fdff:fe8a:5f28 dev eth0
 
+LED should go GREEN
+
+Then run python2 server.py on the server
+
 
 =====
+
+LEDs:
+
+GREEN (steady) = communicating with server (sending data).
+GREEN (blink) =  standby for earthquake. Conection to server succesfull.
+
+YELLOW (steady) = Trying to communicate with server but there is no connection. (it has got data in memory)
+
+BLUE = Taking Samples of earthquake.
+
+RED (blink): standby for earthquake. No conection to server.
