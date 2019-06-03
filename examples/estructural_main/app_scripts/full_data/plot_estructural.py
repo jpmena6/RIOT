@@ -7,7 +7,7 @@ import time
 node = "e45c"
 node = "bd07"
 node = ":365"
-num = "1"
+num = "2"
 
 def bit20_to_int(num):
 	if (num & 0x80000): # is signed
