@@ -69,17 +69,17 @@ void *sampler_start(void *arg)
 	(void) arg;
 
 	
-	uint32_t the_time;
-	uint8_t ledon = 0;
+	uint64_t the_time;
+	//uint8_t ledon = 0;
 	gpio_init(APP_GPIO_PIN, GPIO_OUT);
 	gpio_init(APP_LED_GREEN, GPIO_OUT);
 	xtimer_ticks32_t last_time = xtimer_now();
 	
 	while(1){
 		int32_t delay = 0;
+		the_time = xtimer_now_usec() + TheDeltaTime;
 		if (ApplyDelay){
-			ledon = 0;
-			the_time = xtimer_now_usec() + TheDeltaTime;
+			//ledon = 0;
 			delay = abs(the_time%BUG_TIME_US);
 			if (delay*2 > BUG_TIME_US){
 				delay = -(BUG_TIME_US-delay);
@@ -89,11 +89,16 @@ void *sampler_start(void *arg)
 			
 		xtimer_periodic_wakeup(&last_time, BUG_TIME_US - delay);
 		//gpio_toggle(APP_GPIO_PIN);
-		if ((ledon++ & 0b111) == 0b111)
+		//if (the_time & (1<<24))
+		//	ledon = 0;
+
+		//if ((ledon++ & 0b111) == 0b111)
 			gpio_toggle(APP_LED_GREEN);
-		else
-			gpio_set(APP_LED_GREEN);
-		gpio_toggle(APP_GPIO_PIN);
+			//gpio_set(APP_LED_GREEN);
+			
+		//else
+		//	gpio_set(APP_LED_GREEN);
+		//gpio_toggle(APP_GPIO_PIN);
 		//sample_now++; /* bug.. */
 		
 	}
@@ -111,7 +116,8 @@ void *earthquake_manage(void * arg)
 	uint8_t flash_full = 0;
 	while(1){
 		msg_receive(&msg); /* blocks until message received */
-		puts("Received message");
+		//puts("Received message");
+		led_blue(1);
 		//char debug[100];
 		//save_sd_t * save_sd_msg =  (save_sd_t *) msg.content.ptr;
 		//sample_t * sample_buffer = save_sd_msg->sample_buffer;
@@ -152,11 +158,12 @@ int main(void)
 
 	if (have_saved_earthquake()){
 		led_blue(0);
-		led_red(0);
-		led_green(1);
+		led_red(1);
+		led_green(0);
 		while(!PingReply){
 			xtimer_sleep(5);
 		}
+		led_green(1);
 		puts("Begin send all to server !!");
 		com_send_all_server(DELAY_UDP_SENDS_US);
 		//coms_send_to("fd11::100", PORT_SERVER, "I am a MCU !");

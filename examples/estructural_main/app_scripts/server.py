@@ -43,12 +43,13 @@ class Node:
 			if (page > idealpage):
 				return idealpage
 			elif (page < idealpage): # duplication
-				print "duplication on file {}, node {}!".format(page, self.directory)
+				print "on file {}, node {} (DUP!)".format(page, self.directory)
 				if filecmp.cmp("{}/{}".format(self.directory,namefile), "{}/{}".format(self.directory,lastfilename)):
 					os.remove("{}/{}".format(self.directory,lastfilename))
 				else:
 					print "Have two files for same page but contents differ! manually select.."
-					raise
+					os.remove("{}/{}".format(self.directory,lastfilename)) # this should not go here
+					#raise
 			else:
 				idealpage += 1
 
@@ -66,7 +67,7 @@ class Node:
 		return True
 
 	def request_page(self, page):
-		print("Requesting page: S{} to node {}".format(page, self.directory))
+		print("Req. page: S{} to node {}".format(page, self.directory))
 		self.sock.sendto("S{}".format(page), (self.ipv6, self.port))
 		return
 

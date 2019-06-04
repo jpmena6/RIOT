@@ -7,7 +7,11 @@
 #define SAMPLE_TIME_US (3000)
 #define HISTORY_TIME_S (5) /* prefer a number such that HISTORY_TIME_S*SAMPLES_PER_SECOND%20==0 */
 //#define EARTHQUAKE_ADXL335X 68000000000
-#define EARTHQUAKE_THRESHOLD 1.01
+#define EARTHQUAKE_THRESHOLD 1.2
+
+/* to use lowpassfilter define this to 1 */
+#define LOWPASSFILTER 0
+/* if using lowpass then use THRESHOLD 1.01 TAU 20000 PROB 0.9 */
 #define EARTHQUAKE_TAU_US 20000.0
 #define EARTHQUAKE_THRESHOLD_PROBABILITY 0.9
 
@@ -52,7 +56,7 @@ extern int16_t RequestedPage;
 void estructural_init(void);
 
 /* sets the time */
-void estructural_set_counter(uint32_t counter);
+void estructural_set_counter(uint32_t ntp_time);
 
 /* called every SAMPLE_TIME_US
  * the pid is the process to notify when to save to SD

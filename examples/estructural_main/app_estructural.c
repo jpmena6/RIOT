@@ -40,11 +40,10 @@ void led_green(uint8_t turn_on)
 }
 
 
-void estructural_set_counter(uint32_t counter)
+void estructural_set_counter(uint32_t ntp_time)
 {
 	
 	uint32_t local_time = xtimer_now_usec();
-	uint32_t ntp_time= counter;
 	TheDeltaTime = ntp_time - local_time; /* the delta to reach realtime */
 	ApplyDelay = 1;
 
@@ -71,9 +70,10 @@ static void calibrate_earthquake(void)
 		int32_t x = bit20_to_int32(sample.x);
 		int32_t y = bit20_to_int32(sample.y);
 		int32_t z = bit20_to_int32(sample.z);
-		EarthquakeThreshold +=  ((float) x*x + y*y + z*z)*EARTHQUAKE_THRESHOLD/average;
+		EarthquakeThreshold += ((float) x*x + y*y + z*z)/average;
 		xtimer_usleep(10000);
 	}
+	EarthquakeThreshold = EarthquakeThreshold*EARTHQUAKE_THRESHOLD;
 }
 
 void estructural_init(void){
@@ -92,6 +92,11 @@ static inline void estructural_switch_buffers(void)
 	RealBuffer = aux;
 }
 
+
+
+
+#if LOWPASSFILTER
+/* lowpass */
 static uint8_t thereis_earthquake(sample_t * sample){
 
 	int32_t x  =bit20_to_int32(sample->x);
@@ -112,6 +117,18 @@ static uint8_t thereis_earthquake(sample_t * sample){
 	//print_float(earthquake_probability,4);
 	return (earthquake_probability > EARTHQUAKE_THRESHOLD_PROBABILITY);
 }
+#else
+/* just a threshold comparator */
+static uint8_t thereis_earthquake(sample_t * sample){
+	int32_t x  = bit20_to_int32(sample->x);
+	int32_t y  = bit20_to_int32(sample->y);
+	int32_t z  = bit20_to_int32(sample->z);
+	float mag = (float) x*x + y*y + z*z;
+	if (mag > EarthquakeThreshold)
+		return 1;
+	return 0;
+}
+#endif
 
 void notify_save_to_flash(kernel_pid_t * pid_save, uint16_t sample_counter, sample_t * big_buffer)
 {
@@ -154,7 +171,9 @@ void estructural_save_data(sample_t * sample ,void * pid){
 		}
 	}
 	/* we have an earthquake for the first time*/
+	
 	if (thereis_earthquake(sample) && !(have_earthquake)){
+	
 		puts("Earquake mode on !");
 		have_earthquake = 1;
 		estructural_switch_buffers();

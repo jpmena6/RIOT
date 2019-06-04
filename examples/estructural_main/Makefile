@@ -1,4 +1,4 @@
-APPLICATION = openthread-estructural-test
+APPLICATION = estructural
 
 # must add this
 CFLAGS += -D_APP_ESTRUCTURAL_
