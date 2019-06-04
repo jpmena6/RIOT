@@ -155,18 +155,18 @@ void estructural_save_data(sample_t * sample ,void * pid){
 	//(void)pid;
 	kernel_pid_t * pid_save = (kernel_pid_t *) pid;
 	
-	static uint32_t t = 0;
-	static uint32_t x = 0xff;
-	static uint32_t y = 0xfff;
-	static uint32_t z = 0xffff;
-	sample_t fakesample;
-	fakesample.x = x++;
-	fakesample.y = y++;
-	fakesample.z = z++;
-	fakesample.ntp_time = t++;
+	//static uint32_t t = 0;
+	//static uint32_t x = 0xff;
+	//static uint32_t y = 0xfff;
+	//static uint32_t z = 0xffff;
+	//sample_t fakesample;
+	//fakesample.x = x++;
+	//fakesample.y = y++;
+	//fakesample.z = z++;
+	//fakesample.ntp_time = t++;
 	
-	//RealBuffer[sample_counter++] = *sample;
-	RealBuffer[sample_counter++] = fakesample;
+	RealBuffer[sample_counter++] = *sample;
+	//RealBuffer[sample_counter++] = fakesample;
 
 	if (sample_counter >= SAMPLES_PER_SECOND*HISTORY_TIME_S){
 		sample_counter = 0;
