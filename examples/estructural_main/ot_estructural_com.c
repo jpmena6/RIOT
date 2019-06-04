@@ -171,7 +171,7 @@ static appPingParams pingParams = {	.mLocalIp = MyIp,\
 static uint8_t * PingRes;
 uint8_t coms_ping_server(char * aPeerIpv6, uint8_t * ping_res)
 {
-	puts("Sending ping..");
+	//puts("Sending ping..");
 	pingParams.mPeerIp = aPeerIpv6;
 	*ping_res = 0;
 	PingRes = ping_res;
@@ -279,9 +279,10 @@ void coms_process_server(void *aContext, otMessage *aMessage, const otMessageInf
 
 
 	if (buff[0] == 'F'){ 		/* Delete the Flash */
+	}else if (buff[0] == 'R'){ 	/* Reboot device and delete the flash */
+		/* is has been seen that erase might not arrive, so we will erase the flash here */
 		puts("Erasing Flash !!");
 		AT45DB041E_chip_erase();
-	}else if (buff[0] == 'R'){ 	/* Reboot device */
 		puts("Rebooting !");
 		pm_reboot();
 	}else if(buff[0] == 'S'){	/* send a page */

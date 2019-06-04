@@ -4,7 +4,7 @@ APPLICATION = estructural
 CFLAGS += -D_APP_ESTRUCTURAL_
 
 # added for app
-USEMODULE += periph_rtt
+#USEMODULE += periph_rtt
 
 # If no BOARD is found in the environment, use this default:
 #BOARD ?= samr21-xpro

@@ -116,7 +116,7 @@ void spi_init(spi_t bus)
 
 void spi_init_pins(spi_t bus)
 {
-    gpio_init_port(spi_config[bus].pin_miso, spi_config[bus].pcr);
+    gpio_init_port(spi_config[bus].pin_miso, spi_config[bus].pcr| GPIO_IN_PD);
     gpio_init_port(spi_config[bus].pin_mosi, spi_config[bus].pcr);
     gpio_init_port(spi_config[bus].pin_clk , spi_config[bus].pcr);
 }

@@ -133,13 +133,15 @@ static uint8_t thereis_earthquake(sample_t * sample){
 void notify_save_to_flash(kernel_pid_t * pid_save, uint16_t sample_counter, sample_t * big_buffer)
 {
 
-	char debug[100];
-	sprintf(debug, "kernel_pid = %ld, sample_counter = %d, buffer_addr = %ld", (uint32_t) pid_save, sample_counter ,(uint32_t) &big_buffer[0]);
-	puts(debug);
+	//char debug[100];
+	//sprintf(debug, "kernel_pid = %ld, sample_counter = %d, buffer_addr = %ld", (uint32_t) pid_save, sample_counter ,(uint32_t) &(big_buffer[0]));
+	//puts(debug);
 
 
 	static msg_t msg;
-	save_sd_t msg_sd = {.sample_counter = sample_counter, .sample_buffer = big_buffer};
+	static save_sd_t msg_sd;
+	msg_sd.sample_counter = sample_counter;
+	msg_sd.sample_buffer = big_buffer;
 	msg.content.ptr = (void * ) &msg_sd;
 	msg_send(&msg, *pid_save); /* blocking */
 }
@@ -148,24 +150,28 @@ void estructural_save_data(sample_t * sample ,void * pid){
 
 	static uint16_t sample_counter = 0;
 	static uint8_t have_earthquake = 0;
-
+	
 	/* notify process when to save */
+	//(void)pid;
 	kernel_pid_t * pid_save = (kernel_pid_t *) pid;
 	
-	//sample_t fakesample;
-	//fakesample.x = 0xabc;
-	//fakesample.y = 0x6666;
-	//fakesample.z = 0x1234;
-	//fakesample.ntp_time = 0xffeedd11;
+	static uint32_t t = 0;
+	static uint32_t x = 0xff;
+	static uint32_t y = 0xfff;
+	static uint32_t z = 0xffff;
+	sample_t fakesample;
+	fakesample.x = x++;
+	fakesample.y = y++;
+	fakesample.z = z++;
+	fakesample.ntp_time = t++;
 	
-	RealBuffer[sample_counter++] = *sample;
-	//RealBuffer[sample_counter++] = fakesample;
+	//RealBuffer[sample_counter++] = *sample;
+	RealBuffer[sample_counter++] = fakesample;
 
 	if (sample_counter >= SAMPLES_PER_SECOND*HISTORY_TIME_S){
 		sample_counter = 0;
-		if (have_earthquake){
+		if (have_earthquake){ /* there has been an earthquake */
 			estructural_switch_buffers();
-
 			notify_save_to_flash(pid_save, sample_counter, FlashBuffer);
 			
 		}
@@ -226,9 +232,13 @@ uint8_t save_to_flash(void * msg){
 	puts("Saving Earthquake to flash page !");
 
 	for(i=0;i<SAMPLES_PER_SECOND*HISTORY_TIME_S;i++){
-
+		/* sample_buffer[current_sample++] will not work if sample_buffer is not full ! */
+		char debug[100];
+		sprintf(debug, "current_sample = %d, buffer_addr = %ld",current_sample ,(uint32_t) &(sample_buffer[0]));
+		puts(debug);
+		xtimer_usleep(1000);
 		space_available = _add_sample_to_write_buff(write_buff, &sample_buffer[current_sample++],&write_buff_pos);
-		//printf("write_buff_pos = %d\r\n",write_buff_pos);
+		
 		if (!space_available){
 			//puts("page_write");
 			AT45DB041E_page_write(page++, write_buff,write_buff_pos);
@@ -241,6 +251,7 @@ uint8_t save_to_flash(void * msg){
 		if (current_sample >= SAMPLES_PER_SECOND*HISTORY_TIME_S){
 			current_sample = 0;
 		}
+		
 	}
 	
 	return (page >= 2048); /* flashfull */

@@ -37,7 +37,7 @@ void *ping_monitor(void *arg)
 	(void) arg;
 	while(1){
 		thread_yield();
-		xtimer_sleep(28);
+		xtimer_sleep(27);
 		puts("Sending ping");
 		if (coms_ping_server("fd11::100", &PingReply)){
 			puts("Error sending PING to Server");
@@ -45,9 +45,9 @@ void *ping_monitor(void *arg)
 			led_red(1);
 		}
 		/* if not received after 3 seconds restart coms */
-		xtimer_sleep(2);
+		xtimer_sleep(3);
 		if (!PingReply){
-			puts("No ping received");
+			puts("ping timeout");
 			com_thread_restart();
 			led_red(1);
 		}else{
@@ -106,7 +106,7 @@ void *sampler_start(void *arg)
 }
 
 static kernel_pid_t earthquake_manage_pid;
-char earthquake_manage_stack[THREAD_STACKSIZE_MEDIUM];
+char earthquake_manage_stack[THREAD_STACKSIZE_MEDIUM*2];
 //static msg_t rcv_queue[1];
 void *earthquake_manage(void * arg)
 {
@@ -117,7 +117,7 @@ void *earthquake_manage(void * arg)
 	while(1){
 		msg_receive(&msg); /* blocks until message received */
 		//puts("Received message");
-		led_blue(1);
+		//led_blue(1);
 		//char debug[100];
 		//save_sd_t * save_sd_msg =  (save_sd_t *) msg.content.ptr;
 		//sample_t * sample_buffer = save_sd_msg->sample_buffer;
@@ -125,7 +125,7 @@ void *earthquake_manage(void * arg)
 		//puts(debug);
 		flash_full = save_to_flash((void *) &msg);
 		if(flash_full){
-			puts("rebooting !");
+			puts("[main.c] flash is full.. rebooting !");
 			pm_reboot();
 		}
 	}
