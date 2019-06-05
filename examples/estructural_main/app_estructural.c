@@ -230,23 +230,31 @@ uint8_t save_to_flash(void * msg){
 	uint16_t i;
 	uint8_t space_available = 1;
 	puts("Saving Earthquake to flash page !");
-
-	for(i=0;i<SAMPLES_PER_SECOND*HISTORY_TIME_S;i++){
+	char debug[100];
+	sprintf(debug, "current_sample = %d, sample_time=%ld",current_sample,sample_buffer[0].ntp_time);
+	puts(debug);
+	for(i=0;(i<SAMPLES_PER_SECOND*HISTORY_TIME_S) && (page < 2048);i++){
 		/* sample_buffer[current_sample++] will not work if sample_buffer is not full ! */
-		char debug[100];
-		sprintf(debug, "current_sample = %d, buffer_addr = %ld",current_sample ,(uint32_t) &(sample_buffer[0]));
-		puts(debug);
-		xtimer_usleep(1000);
+		//char debug[100];
+		//sprintf(debug, "current_sample = %d, buffer_addr = %ld",current_sample ,(uint32_t) &(sample_buffer[0]));
+		//puts(debug);
+		//xtimer_usleep(1000);
 		space_available = _add_sample_to_write_buff(write_buff, &sample_buffer[current_sample++],&write_buff_pos);
 		
 		if (!space_available){
 			//puts("page_write");
+			sprintf(debug, "writing page = %d (eop)",page);
+			puts(debug);
 			AT45DB041E_page_write(page++, write_buff,write_buff_pos);
 			write_buff_pos = 0;
+			
 		}else if(i == SAMPLES_PER_SECOND*HISTORY_TIME_S - 1){ /* last iteration */
 			//puts("page_write");
+			sprintf(debug, "writing page = %d (eob)",page);
+			puts(debug);
 			AT45DB041E_page_write(page++, write_buff,write_buff_pos);
 			write_buff_pos = 0;
+			
 		}
 		if (current_sample >= SAMPLES_PER_SECOND*HISTORY_TIME_S){
 			current_sample = 0;

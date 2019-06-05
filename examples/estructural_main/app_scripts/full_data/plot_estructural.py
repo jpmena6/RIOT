@@ -5,9 +5,9 @@ import os
 import struct
 import time 
 node = "e45c"
-#node = "bd07"
+node = "bd07"
 #node = ":365"
-num = "5"
+num = "9"
 
 def bit20_to_int(num):
 	if (num & 0x80000): # is signed
@@ -66,7 +66,7 @@ plt.plot(list_e,list_z)
 plt.grid(b=1)
 plt.show()
 
-plt.plot(list_e)
+plt.plot(list_e,'o')
 plt.grid(b=1)
 plt.show()
 

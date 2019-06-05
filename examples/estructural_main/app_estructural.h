@@ -17,7 +17,7 @@
 
 #define BUG_TIME_US 1000000  /* the time the green led goes on */
 #define SAMPLES_PER_SECOND (1000000/SAMPLE_TIME_US)
-#define DELAY_UDP_SENDS_US 100000
+#define DELAY_UDP_SENDS_US 40000
 
 #ifdef MODULE_KW41ZRF
 
