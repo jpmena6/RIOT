@@ -7,7 +7,7 @@
 #define SAMPLE_TIME_US (5000)
 #define HISTORY_TIME_S (5) /* prefer a number such that HISTORY_TIME_S*SAMPLES_PER_SECOND%20==0 */
 //#define EARTHQUAKE_ADXL335X 68000000000
-#define EARTHQUAKE_THRESHOLD 1.2
+#define EARTHQUAKE_THRESHOLD 1.35
 
 /* to use lowpassfilter define this to 1 */
 #define LOWPASSFILTER 0

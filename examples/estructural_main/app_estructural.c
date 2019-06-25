@@ -4,7 +4,8 @@
 #include "AT45DB041E.h"
 #include <xtimer.h>
 #include <fmt.h>
-
+#include <stdlib.h>
+#include <math.h>
 
 void led_red(uint8_t turn_on)
 {
@@ -55,7 +56,9 @@ static sample_t BigBuffer2[SAMPLES_PER_SECOND*HISTORY_TIME_S];
 static sample_t * FlashBuffer;
 static sample_t * RealBuffer;
 
-static float EarthquakeThreshold = 0;
+static float EarthquakeThreshold_x = 0;
+static float EarthquakeThreshold_y = 0;
+static float EarthquakeThreshold_z = 0;
 
 static void calibrate_earthquake(void)
 {
@@ -63,17 +66,22 @@ static void calibrate_earthquake(void)
 	
 	const float average = 100.0;
 	uint8_t i;
-	EarthquakeThreshold = 0;
+	EarthquakeThreshold_x = 0;
+	EarthquakeThreshold_y = 0;
+	EarthquakeThreshold_z = 0;
 
+	xtimer_usleep(4000000);
 	for (i=0;i<average;i++){
 		adxl335_get(&sample.x, &sample.y, &sample.z);
 		int32_t x = bit20_to_int32(sample.x);
 		int32_t y = bit20_to_int32(sample.y);
 		int32_t z = bit20_to_int32(sample.z);
-		EarthquakeThreshold += ((float) x*x + y*y + z*z)/average;
+		EarthquakeThreshold_x += ((float) x)/average;
+		EarthquakeThreshold_y += ((float) y)/average;
+		EarthquakeThreshold_z += ((float) z)/average;
 		xtimer_usleep(10000);
 	}
-	EarthquakeThreshold = EarthquakeThreshold*EARTHQUAKE_THRESHOLD;
+
 }
 
 void estructural_init(void){
@@ -99,9 +107,9 @@ static inline void estructural_switch_buffers(void)
 /* lowpass */
 static uint8_t thereis_earthquake(sample_t * sample){
 
-	int32_t x  =bit20_to_int32(sample->x);
-	int32_t y  =bit20_to_int32(sample->y);
-	int32_t z  =bit20_to_int32(sample->z);
+	int32_t x  = bit20_to_int32(sample->x);
+	int32_t y  = bit20_to_int32(sample->y);
+	int32_t z  = bit20_to_int32(sample->z);
 	const float a = (EARTHQUAKE_TAU_US/SAMPLE_TIME_US);
 	const float b = (a + 1);
 	
@@ -119,13 +127,16 @@ static uint8_t thereis_earthquake(sample_t * sample){
 }
 #else
 /* just a threshold comparator */
+#define THRESHOLD_A 20000.0
 static uint8_t thereis_earthquake(sample_t * sample){
-	int32_t x  = bit20_to_int32(sample->x);
-	int32_t y  = bit20_to_int32(sample->y);
-	int32_t z  = bit20_to_int32(sample->z);
-	float mag = (float) x*x + y*y + z*z;
-	if (mag > EarthquakeThreshold)
+	float a_x  = fabs((float) bit20_to_int32(sample->x) - EarthquakeThreshold_x);
+	float a_y  = fabs((float) bit20_to_int32(sample->y) - EarthquakeThreshold_y);
+	float a_z  = fabs((float) bit20_to_int32(sample->z) - EarthquakeThreshold_z);
+
+
+	if ((a_x > THRESHOLD_A) || (a_y > THRESHOLD_A) || (a_z > THRESHOLD_A))
 		return 1;
+	
 	return 0;
 }
 #endif
