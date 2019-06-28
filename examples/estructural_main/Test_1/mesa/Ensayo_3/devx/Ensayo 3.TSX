@@ -1,0 +1,22 @@
+CATMAN TEST FILE
+PATH=C:\Users\Laboratorio E\Desktop\Hugo\Tomas Herrera
+Job name=Job1
+Data file with path=C:\Users\Laboratorio E\Desktop\Hugo\Tomas Herrera\Ensayo 3.XLSX
+Data file=Ensayo 3.XLSX
+File comment=
+Operator=
+Department=
+Comment=
+Default sample rate=300 Hz
+Slow sample rate=5 Hz
+Fast sample rate=2400 Hz
+Number of samples default sample rate=65757
+Number of samples slow sample rate=0
+Number of samples fast sample rate=0
+Start mode=Manual
+Start time=25-06-2019 16:11:51
+Stop mode=Manual
+Stop time=25-06-2019 16:15:31
+catmanEasy/AP version=3.5.1.48
+Numerical precision=8 Byte Float
+DATAFILE=C:\Users\Laboratorio E\Desktop\Hugo\Tomas Herrera\Ensayo 3.XLSX
