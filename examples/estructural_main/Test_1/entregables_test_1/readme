@@ -1,0 +1,28 @@
+Ensayo 1:
+
+Martillo	x3
+4Hz 		0.01m 	@ 20s
+2Hz 		0.02m 	@ 20s
+1Hz			0.01m 	@ 30s
+0.51Hz		0.01m 	@ 30s
+0.21Hz		0.01m 	@ 30s
+Martillo	x3
+
+
+Ensayo 2:
+
+Martillo	x3
+Chirps		x3		@0.001m
+Kobe
+
+
+Ensayo 3:
+
+Martillo	x3
+Kobe
+Northbridge	x3
+Martillo	x3
+Northbridge
+
+
+

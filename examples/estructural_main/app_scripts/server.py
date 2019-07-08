@@ -1,3 +1,11 @@
+
+# To use:
+# Make router use fd11::/64 as prefix as ULA
+# Asign fd11::100 to server
+# ip -6 addr add fd11::100/64 dev wlan0
+# wlp3s0
+# Run on the server using python2
+
 import socket
 from datetime import datetime
 import filecmp
@@ -55,7 +63,9 @@ class Node:
 
 			lastfilename=namefile
 			
-		# check data and return missing page		
+		# check data and return missing page
+		if (idealpage <= 2048):
+			return idealpage	
 		return None
 
 	def restart_node(self):

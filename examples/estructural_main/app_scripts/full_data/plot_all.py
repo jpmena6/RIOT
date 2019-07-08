@@ -31,4 +31,4 @@ def plot_join(list_texts, us_min, us_max, axis):
 	plt.grid(b=1)
 	plt.show()
 
-plot_join([":365_2.txt","bd07_2.txt","e45c_2.txt"], 0, 4000000000,"x")
+plot_join([":365_0.txt","bd07_0.txt","e45c_0.txt"], 0, 4000000000,"x")
