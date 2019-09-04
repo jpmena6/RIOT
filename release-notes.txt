@@ -15,7 +15,7 @@ licensed with a non-viral copyleft license (LGPLv2.1), which allows indirect
 business models around the free open-source software platform provided by RIOT.
 
 
-About this release:
+About this release_holahola:
 ===================
 
 The 2018.10 release includes new features, like CoAP Resource Directory and
